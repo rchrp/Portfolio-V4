@@ -102,3 +102,80 @@ model ProjectMetric {
 
   @@index([projectId, sortOrder])
 }
+
+// ─── Admin panel ─────────────────────────────────────────────────────────────
+// A single administrator signs in with passkeys (WebAuthn). There is no
+// password: the first passkey is enrolled through a one-time link printed by
+// `pnpm admin:invite`, which needs shell access to the server.
+
+/// A passkey allowed to sign in to the admin panel.
+model AdminPasskey {
+  /// Base64url credential ID, as sent by the authenticator.
+  id         String         @id @db.VarChar(1024)
+  publicKey  Bytes
+  /// Signature counter, checked to detect cloned authenticators.
+  counter    BigInt         @default(0)
+  transports String[]       @default([])
+  /// "singleDevice" or "multiDevice" (synced, e.g. by Bitwarden).
+  deviceType String         @db.VarChar(16)
+  backedUp   Boolean        @default(false)
+  name       String         @db.VarChar(60)
+  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
+  lastUsedAt DateTime?      @db.Timestamptz(3)
+  sessions   AdminSession[]
+}
+
+/// A signed-in browser. The cookie holds a random token; only its SHA-256 is
+/// stored, so a database leak does not leak live sessions.
+model AdminSession {
+  id         String       @id @db.Char(64)
+  passkeyId  String
+  passkey    AdminPasskey @relation(fields: [passkeyId], references: [id], onDelete: Cascade)
+  userAgent  String?      @db.VarChar(255)
+  ipAddress  String?      @db.VarChar(64)
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+  lastSeenAt DateTime     @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime     @db.Timestamptz(3)
+
+  @@index([passkeyId])
+  @@index([expiresAt])
+}
+
+enum AdminChallengePurpose {
+  REGISTRATION
+  AUTHENTICATION
+}
+
+/// A WebAuthn challenge waiting for its answer. Single use, short lived.
+model AdminChallenge {
+  /// SHA-256 of the token kept in the browser's challenge cookie.
+  id        String                @id @db.Char(64)
+  purpose   AdminChallengePurpose
+  challenge String                @db.VarChar(128)
+  /// Registration only: the invite or the session that allowed it.
+  inviteId  String?               @db.Char(64)
+  sessionId String?               @db.Char(64)
+  expiresAt DateTime              @db.Timestamptz(3)
+
+  @@index([expiresAt])
+}
+
+/// A one-time link that lets a browser enroll a passkey.
+model AdminInvite {
+  /// SHA-256 of the token carried in the link's fragment.
+  id        String    @id @db.Char(64)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+}
+
+/// What happened in the admin panel, newest first on the security page.
+model AdminAuditEvent {
+  id        String   @id @default(cuid())
+  action    String   @db.VarChar(40)
+  detail    String?  @db.VarChar(240)
+  ipAddress String?  @db.VarChar(64)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt])
+}

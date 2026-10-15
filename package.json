@@ -14,7 +14,8 @@
     "db:migrate": "pnpm --filter web db:migrate",
     "db:seed": "pnpm --filter web db:seed",
     "db:reset": "pnpm --filter web db:reset",
-    "db:studio": "pnpm --filter web db:studio"
+    "db:studio": "pnpm --filter web db:studio",
+    "admin:invite": "pnpm --filter web admin:invite"
   },
   "packageManager": "pnpm@10.33.2"
 }

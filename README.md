@@ -42,7 +42,7 @@ pnpm format:check
 
 The page reads as one scroll-driven story; its copy lives in `apps/web/src/lib/site-content.ts`.
 
-1. **Hero** — portrait and interactive pixel matrix (light, editorial).
+1. **Hero** — interactive pixel matrix, name and contact actions (light, editorial). On load, a short WebGL intro draws the portrait from its edge map on the matrix grid, fills the silhouette, doubles its resolution step by step while shifting from orange to the photo's colors, then hands over to the real image and releases its WebGL context. Contact details and profile links live in `contact` (`apps/web/src/lib/site-content.ts`) and appear once set.
 2. **Manifesto** — after a light-to-night gradient, the statement lights up word by word as you scroll.
 3. **Terminal** — a three.js scene (loaded on demand) with a vintage computer model powers on, boots, and switches channel for each project as the page scrolls. The screen is a 2D canvas texture (a small retro desktop) rendered through a curved-glass shader: barrel distortion, light radial chromatic aberration, scanlines, aperture grille, glitch on channel change, line-then-open power cycle. The shader is applied to the model's own curved glass. A `RectAreaLight` tinted by the displayed image lights the keyboard and desk. Behind the canvas, the pixel matrix redraws the active project from its edge map. Arrow keys, the side rail and previous/next buttons scroll to a given project; each opens an accessible native dialog.
 4. **Contact** — the monitor switches off and the matrix redraws the portrait from its edge map.
@@ -59,7 +59,7 @@ pnpm --filter web edges public/projects/new.png # specific files under public/
 pnpm --filter web edges https://example.com/cover.jpg
 ```
 
-Projects whose image has no edge map fall back to computing it in the browser (remote images need CORS headers).
+Projects whose image has no edge map fall back to computing it in the browser (remote images need CORS headers). The portrait also gets a light color texture (`*-color.webp`, 960 px) used by the hero intro.
 
 ### 3D model
 

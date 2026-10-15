@@ -41,10 +41,6 @@ export function Manifesto() {
       style={{ "--n": words.length } as CSSProperties}
     >
       <div className="manifesto-sticky">
-        <p className="chapter-label manifesto-chapter">
-          <span className="chapter-marker" aria-hidden="true" />
-          {manifesto.chapter}
-        </p>
         <h2 id="manifesto-heading" className="manifesto-text">
           <span className="sr-only">{manifesto.text.replaceAll("*", "")}</span>
           <span aria-hidden="true">
@@ -63,7 +59,9 @@ export function Manifesto() {
         <ul className="manifesto-disciplines">
           {manifesto.disciplines.map(({ label, detail }, index) => (
             <li key={label} style={{ "--i": index } as CSSProperties}>
-              <span className="manifesto-index">0{index + 1}</span>
+              <span className="big-index" aria-hidden="true">
+                0{index + 1}
+              </span>
               <strong>{label}</strong>
               <span>{detail}</span>
             </li>

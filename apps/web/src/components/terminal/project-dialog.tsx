@@ -83,7 +83,7 @@ export function ProjectDialog({
         />
       </div>
       <div className="project-dialog-content">
-        <p className="chapter-label">
+        <p className="project-dialog-meta">
           {project.category} / {project.year}
         </p>
         <h2 id="project-dialog-title">{project.title}</h2>

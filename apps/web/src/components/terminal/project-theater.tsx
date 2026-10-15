@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUpRight, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
 } from "react";
+import { PixelArrow } from "@/components/pixel-arrow";
 import { PixelMatrix, type FieldRect } from "@/components/pixel-matrix";
 import type { Project, ProjectCatalog } from "@/lib/projects";
 import { projectsChapter } from "@/lib/site-content";
@@ -212,10 +213,6 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
         className="theater theater-empty"
         aria-labelledby="projects-heading"
       >
-        <p className="chapter-label">
-          <span className="chapter-marker" aria-hidden="true" />
-          {projectsChapter.chapter}
-        </p>
         <h2 id="projects-heading">La suite se construit.</h2>
         <p>Les projets seront présentés ici dès leur publication.</p>
       </section>
@@ -280,17 +277,10 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
         <div className="theater-shade" aria-hidden="true" />
 
         <header className="theater-header">
-          <p className="chapter-label">
-            <span className="chapter-marker" aria-hidden="true" />
-            {projectsChapter.chapter}
-          </p>
           <h2 id="projects-heading" className="theater-heading">
             {projectsChapter.title}
           </h2>
           <p className="theater-lead">{projectsChapter.lead}</p>
-          <p className="theater-hint" aria-hidden="true">
-            <ArrowDown size={14} /> Défiler pour allumer
-          </p>
         </header>
 
         <div
@@ -301,10 +291,14 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
           tabIndex={0}
           onKeyDown={onKeyDown}
         >
-          <p className="theater-count">
-            <span>{pad(active + 1)}</span> / {pad(count)}
-          </p>
           <h3 className="theater-title">
+            <span
+              key={`index-${project.id}`}
+              className="big-index theater-index"
+              aria-hidden="true"
+            >
+              {pad(active + 1)}
+            </span>
             <ScrambleText text={project.title} />
           </h3>
           <p key={`summary-${project.id}`} className="theater-summary">
@@ -328,10 +322,11 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
             ))}
           </ul>
           <button
-            className="theater-discover"
+            className="pixel-button pixel-button-dark"
             onClick={() => setDetail(project)}
           >
-            Découvrir le projet <ArrowUpRight size={17} aria-hidden="true" />
+            Découvrir le projet
+            <PixelArrow />
           </button>
         </div>
 
@@ -368,9 +363,6 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
           </button>
         </nav>
 
-        <p className="theater-signoff" aria-hidden="true">
-          Fin de transmission
-        </p>
         <p className="sr-only" aria-live="polite" aria-atomic="true">
           Projet {active + 1} sur {count} : {project.title}.
         </p>

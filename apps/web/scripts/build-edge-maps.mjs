@@ -18,6 +18,9 @@ const outputDirectory = path.join(publicDirectory, "matrix");
 const manifestPath = path.join(root, "src/lib/edge-maps.json");
 const imagePattern = /\.(png|jpe?g|webp|avif|svg)$/i;
 const workingWidth = 384;
+// Images that also get a light color texture, for the hero's WebGL intro.
+const colorSources = new Set(["/portrait_3_white_bg_wider.png"]);
+const colorWidth = 960;
 
 const defaultSources = [
   ...(await readdir(path.join(publicDirectory, "projects")))
@@ -77,6 +80,15 @@ for (const key of keys) {
       .toFile(path.join(outputDirectory, fileName));
 
     manifest[key] = `/matrix/${fileName}`;
+
+    if (colorSources.has(key)) {
+      const colorName = `${toSlug(key)}-color.webp`;
+      await sharp(await readSource(key))
+        .resize({ width: colorWidth })
+        .webp({ quality: 82, alphaQuality: 90 })
+        .toFile(path.join(outputDirectory, colorName));
+      console.log(`✓ ${key} → /matrix/${colorName} (color, ${colorWidth}px)`);
+    }
     console.log(
       `✓ ${key} → /matrix/${fileName} (${edges.width}×${edges.height})`,
     );

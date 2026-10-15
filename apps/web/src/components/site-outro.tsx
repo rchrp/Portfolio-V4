@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowUpRight } from "lucide-react";
 import { useRef, useState } from "react";
+import { PixelArrow } from "@/components/pixel-arrow";
 import { PixelMatrix, type FieldRect } from "@/components/pixel-matrix";
+import { GitHubIcon, LinkedInIcon } from "@/components/social-icons";
 import { edgeMapFor } from "@/lib/edge-maps";
-import { credits, outro } from "@/lib/site-content";
+import { contact, credits, outro } from "@/lib/site-content";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
 
 const portrait = "/portrait_3_white_bg_wider.png";
@@ -65,19 +66,42 @@ export function SiteOutro() {
         />
       </div>
       <div className="outro-content">
-        <p className="chapter-label">
-          <span className="chapter-marker" aria-hidden="true" />
-          {outro.chapter}
-        </p>
         <h2 id="outro-heading" className="outro-title">
           <span>{outro.title[0]}</span>
           <span>{outro.title[1]}</span>
         </h2>
         <p className="outro-lead">{outro.lead}</p>
-        {outro.email && (
-          <a className="outro-cta" href={`mailto:${outro.email}`}>
-            {outro.email} <ArrowUpRight size={20} aria-hidden="true" />
-          </a>
+        {(contact.email || contact.linkedin || contact.github) && (
+          <div className="outro-actions">
+            {contact.email && (
+              <a className="pixel-button" href={`mailto:${contact.email}`}>
+                {contact.email}
+                <PixelArrow />
+              </a>
+            )}
+            {contact.linkedin && (
+              <a
+                className="outro-social"
+                href={contact.linkedin}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="LinkedIn (nouvel onglet)"
+              >
+                <LinkedInIcon />
+              </a>
+            )}
+            {contact.github && (
+              <a
+                className="outro-social"
+                href={contact.github}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub (nouvel onglet)"
+              >
+                <GitHubIcon />
+              </a>
+            )}
+          </div>
         )}
       </div>
       <div className="outro-footer">

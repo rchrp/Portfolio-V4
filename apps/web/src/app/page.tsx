@@ -1,15 +1,27 @@
 import Image from "next/image";
 import { Suspense } from "react";
+import { preload } from "react-dom";
 import portrait from "../../public/portrait_3_white_bg_wider.png";
+import { HeroContact } from "@/components/hero-contact";
 import { Manifesto } from "@/components/manifesto";
 import { PixelMatrix } from "@/components/pixel-matrix";
+import { PortraitReveal } from "@/components/portrait-reveal";
 import {
   ProjectsLoading,
   ProjectsSection,
 } from "@/components/projects-section";
 import { SiteOutro } from "@/components/site-outro";
+import { edgeMapFor } from "@/lib/edge-maps";
+
+const HERO_CELL_SPACING = 14;
+const PORTRAIT_EDGES = edgeMapFor("/portrait_3_white_bg_wider.png")!;
+const PORTRAIT_COLOR = "/matrix/portrait-3-white-bg-wider-color.webp";
 
 export default function Home() {
+  // Fetched with the HTML so the intro rarely has to wait for its textures.
+  preload(PORTRAIT_EDGES, { as: "image", fetchPriority: "high" });
+  preload(PORTRAIT_COLOR, { as: "image", fetchPriority: "high" });
+
   return (
     <main>
       <section
@@ -19,20 +31,26 @@ export default function Home() {
         <PixelMatrix
           className="hero-matrix"
           color="#f15a24"
-          cellSpacing={22}
-          influenceRadius={340}
-          minScale={0.17}
-          maxScale={0.76}
-          edgeFade={120}
+          cellSpacing={HERO_CELL_SPACING}
+          influenceRadius={320}
+          minScale={0.15}
+          maxScale={0.74}
+          edgeFade={110}
+          intro={false}
         />
 
-        <div className="hero-portrait" aria-hidden="true">
+        <div className="hero-portrait" aria-hidden="true" data-intro="pending">
           <Image
             src={portrait}
             alt=""
             className="hero-portrait-image"
             sizes="(max-width: 672px) 112vw, 64vw"
             preload
+          />
+          <PortraitReveal
+            edgeSrc={PORTRAIT_EDGES}
+            colorSrc={PORTRAIT_COLOR}
+            cellSpacing={HERO_CELL_SPACING}
           />
         </div>
 
@@ -47,10 +65,13 @@ export default function Home() {
           <p className="hero-edition">Portfolio / 2026</p>
         </header>
 
-        <h1 className="hero-title">
-          <span className="hero-first-name">Raphaël</span>
-          <span className="hero-last-name">Charpentier</span>
-        </h1>
+        <div className="hero-heading">
+          <h1 className="hero-title">
+            <span className="hero-first-name">Raphaël</span>
+            <span className="hero-last-name">Charpentier</span>
+          </h1>
+          <HeroContact />
+        </div>
 
         <div className="hero-bottom-blur" aria-hidden="true" />
       </section>

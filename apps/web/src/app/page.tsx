@@ -14,6 +14,7 @@ import { SiteOutro } from "@/components/site-outro";
 import { edgeMapFor } from "@/lib/edge-maps";
 
 const HERO_CELL_SPACING = 14;
+const HERO_MATRIX = { minScale: 0.15, maxScale: 0.74, radius: 320 };
 const PORTRAIT_EDGES = edgeMapFor("/portrait_3_white_bg_wider.png")!;
 const PORTRAIT_COLOR = "/matrix/portrait-3-white-bg-wider-color.webp";
 
@@ -32,9 +33,9 @@ export default function Home() {
           className="hero-matrix"
           color="#f15a24"
           cellSpacing={HERO_CELL_SPACING}
-          influenceRadius={320}
-          minScale={0.15}
-          maxScale={0.74}
+          influenceRadius={HERO_MATRIX.radius}
+          minScale={HERO_MATRIX.minScale}
+          maxScale={HERO_MATRIX.maxScale}
           edgeFade={110}
           intro={false}
         />
@@ -51,6 +52,11 @@ export default function Home() {
             edgeSrc={PORTRAIT_EDGES}
             colorSrc={PORTRAIT_COLOR}
             cellSpacing={HERO_CELL_SPACING}
+            matrixScale={{
+              min: HERO_MATRIX.minScale,
+              max: HERO_MATRIX.maxScale,
+              radius: HERO_MATRIX.radius,
+            }}
           />
         </div>
 

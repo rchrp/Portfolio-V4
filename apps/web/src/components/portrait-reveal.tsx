@@ -16,6 +16,8 @@ type PortraitRevealProps = {
   colorSrc: string;
   /** Spacing of the hero matrix, so the first cells sit on its grid. */
   cellSpacing: number;
+  /** Hero matrix cell scales and pointer radius, mirrored on hover. */
+  matrixScale: { min: number; max: number; radius: number };
   accent?: string;
 };
 
@@ -40,8 +42,8 @@ const DURATION = 3150;
 /** Skip the intro if its textures take longer than this to arrive. */
 const LOAD_BUDGET = 2200;
 const MAX_DEPTH = SPLIT_SPREAD.length;
-/** Radius of the hover area, in CSS pixels. */
-const HOVER_RADIUS = 150;
+/** How far the pointer pulls the eroded edges, in CSS pixels. */
+const MAGNET_RADIUS = 300;
 
 const glslFloat = (value: number) => value.toFixed(1);
 
@@ -66,11 +68,14 @@ uniform float uTint;
 uniform float uSquare;
 uniform float uSharp;
 uniform vec3 uAccent;
-// Hover mode: around the pointer, the photo turns back into matrix cells.
+// Hover mode: the background matrix nibbles the silhouette's edges,
+// pulled towards the pointer.
 uniform int uMode;
 uniform vec2 uPointer;
 uniform float uRadius;
 uniform float uStrength;
+uniform vec3 uMatrix;
+uniform vec2 uMatrixArea;
 out vec4 fragColor;
 
 const float SPLIT_START = ${glslFloat(SPLIT_START)};
@@ -125,39 +130,72 @@ float presence(float level) {
   return smoothstep(0.02, 0.08, level);
 }
 
-// Same quadtree, driven by distance instead of time: cells stay coarse near
-// the pointer and refine outwards, with jittered thresholds for an organic
-// boundary, down to the photo itself at the edge of the area.
-vec4 hoverCells(vec2 pixel, vec4 direct) {
-  float area = (1.0 - smoothstep(uRadius * 0.6, uRadius, distance(pixel, uPointer))) * uStrength;
-  if (area <= 0.002) return vec4(0.0);
+float valueNoise(vec2 p) {
+  vec2 cell = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash(cell), hash(cell + vec2(1.0, 0.0)), f.x),
+    mix(hash(cell + vec2(0.0, 1.0)), hash(cell + vec2(1.0, 1.0)), f.x),
+    f.y
+  );
+}
+
+// Same vertical fade as the hero matrix's CSS mask.
+float matrixFade(float y) {
+  float t = (y - uMatrixArea.x) / uMatrixArea.y;
+  if (t < 0.08) return 0.0;
+  if (t < 0.17) return (t - 0.08) / 0.09 * 0.12;
+  if (t < 0.34) return 0.12 + (t - 0.17) / 0.17 * 0.88;
+  return 1.0;
+}
+
+// The silhouette's edges dissolve into the hero matrix: the eroded band is
+// anchored on the contour and reaches further in towards the pointer.
+// Cells sit on the matrix grid; at the front they are pixels of the photo,
+// behind it they become the matrix's own orange cells.
+vec4 nibbledEdges(vec2 pixel, vec4 direct) {
+  if (distance(pixel, uPointer) > uRadius + uCell) return vec4(0.0);
 
   vec2 id = floor((pixel - uOrigin) / uCell + 0.5);
   vec2 center = uOrigin + id * uCell;
-  float size = uCell;
-  float influence = 0.0;
-  int depth = 0;
-  for (; depth < ${MAX_DEPTH}; depth++) {
-    if (depth >= uDepth) break;
-    influence = (1.0 - smoothstep(0.0, uRadius, distance(center, uPointer))) * uStrength;
-    float jitter = (hash(id + vec2(float(depth) * 17.3, 3.1)) - 0.5) * 0.2;
-    float threshold = 1.0 - float(depth + 1) / (float(uDepth) + 0.5) + jitter;
-    if (influence > threshold) break;
-    vec2 quadrant = step(center, pixel);
-    size *= 0.5;
-    center += (quadrant - 0.5) * size;
-    id = id * 2.0 + quadrant;
-  }
-  // Finest level: the photo as it is, so the area blends into the image.
-  if (depth >= uDepth) return vec4(0.0);
+  float pull = 1.0 - smoothstep(0.0, uRadius, distance(center, uPointer));
+  pull *= pull * uStrength;
+  if (pull <= 0.001) return vec4(0.0);
 
-  vec4 photo = sampleArea(uPhoto, center, size, 0.0);
-  vec3 color = mix(photo.rgb, uAccent, influence * influence * 0.5);
-  float gap = mix(0.9, 0.8, influence);
-  vec4 cell = square(pixel, center, size * 0.5 * gap * photo.a, color, presence(photo.a));
-  // The page shows between the cells, over the silhouette only.
-  vec4 page = vec4(vec3(direct.a), direct.a);
-  return (cell + page * (1.0 - cell.a)) * area;
+  vec4 photo = sampleArea(uPhoto, center, uCell, 0.0);
+  if (photo.a < 0.04) return vec4(0.0);
+
+  // Depth inside the silhouette from its blurred alpha: 0.5 on the contour.
+  float depth = 0.5 * (
+    sampleArea(uPhoto, center, uCell, 2.0).a +
+    sampleArea(uPhoto, center, uCell, 3.0).a
+  );
+  // Ragged front: slow drifting noise plus per-cell scatter, so neighbors
+  // along the edge are not eaten at the same time.
+  float drift = valueNoise(id * 0.3 + uTime * 0.0004) - 0.5;
+  float scatter = hash(id) - 0.5;
+  float front = 0.5 + pull * (0.3 + drift * 0.3 + scatter * 0.2);
+  float eaten = smoothstep(0.0, 0.16, front - depth);
+  if (eaten <= 0.0) return vec4(0.0);
+
+  // Matrix cell, as the background draws it near the pointer.
+  float near = clamp(1.0 - distance(center, uPointer) / uMatrix.z, 0.0, 1.0);
+  near = near * near * (3.0 - 2.0 * near) * uStrength;
+  float matrixScale = mix(uMatrix.x, uMatrix.y, near);
+  float matrixAlpha = (0.56 + hash(id + 7.7) * 0.34) * matrixFade(center.y);
+
+  float scale = mix(0.94, matrixScale, eaten);
+  vec3 color = mix(photo.rgb, uAccent, eaten);
+  float alpha = mix(1.0, matrixAlpha, eaten);
+  vec4 cell = square(pixel, center, uCell * 0.5 * scale, color, alpha * presence(photo.a));
+
+  // The page shows around the cell: over the photo, and over the matrix
+  // cell drawn beneath once this one replaces it.
+  vec2 offset = abs(pixel - center);
+  float inCell = step(max(offset.x, offset.y), uCell * 0.5);
+  float page = inCell * max(direct.a, eaten);
+  return cell + vec4(vec3(page), page) * (1.0 - cell.a);
 }
 
 void main() {
@@ -172,7 +210,7 @@ void main() {
   }
 
   if (uMode == 1) {
-    fragColor = hoverCells(pixel, direct);
+    fragColor = nibbledEdges(pixel, direct);
     if (fragColor.a <= 0.001) discard;
     return;
   }
@@ -285,6 +323,7 @@ export function PortraitReveal({
   edgeSrc,
   colorSrc,
   cellSpacing,
+  matrixScale: { min: matrixMin, max: matrixMax, radius: matrixReach },
   accent = "#f15a24",
 }: PortraitRevealProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -393,6 +432,8 @@ export function PortraitReveal({
         pointer: uniform("uPointer"),
         radius: uniform("uRadius"),
         strength: uniform("uStrength"),
+        matrix: uniform("uMatrix"),
+        matrixArea: uniform("uMatrixArea"),
       };
       context.uniform1i(uniform("uPhoto"), 0);
       context.uniform1i(uniform("uEdges"), 1);
@@ -443,8 +484,18 @@ export function PortraitReveal({
         const spacing = Math.max(8, cellSpacing);
         let originX = 0;
         let originY = 0;
+        let matrixTop = 0;
+        let matrixHeight = height;
+        let matrixRadius = matrixReach;
         if (matrix) {
           const area = matrix.getBoundingClientRect();
+          matrixTop = (area.top - bounds.top) * pixelRatio;
+          matrixHeight = area.height * pixelRatio;
+          // Same responsive radius as the hero matrix's pointer influence.
+          matrixRadius = Math.min(
+            matrixReach,
+            Math.max(170, area.width * 0.25),
+          );
           const columns = Math.ceil(area.width / spacing) + 2;
           const rows = Math.ceil(area.height / spacing) + 2;
           originX =
@@ -492,6 +543,13 @@ export function PortraitReveal({
         );
         context.uniform1f(uniforms.cell, cell);
         context.uniform1i(uniforms.depth, depth);
+        context.uniform2f(uniforms.matrixArea, matrixTop, matrixHeight);
+        context.uniform3f(
+          uniforms.matrix,
+          matrixMin,
+          matrixMax,
+          matrixRadius * pixelRatio,
+        );
       };
 
       const render = (now: number) => {
@@ -563,14 +621,15 @@ export function PortraitReveal({
 
         context.uniform1i(uniforms.mode, 1);
         context.uniform2f(uniforms.pointer, pointer.x, pointer.y);
-        context.uniform1f(uniforms.radius, HOVER_RADIUS * pixelRatio);
+        context.uniform1f(uniforms.radius, MAGNET_RADIUS * pixelRatio);
         context.uniform1f(uniforms.strength, pointer.strength);
+        context.uniform1f(uniforms.time, performance.now() - startedAt);
         context.drawArrays(context.TRIANGLES, 0, 3);
 
-        const moving =
-          Math.abs(targetX - pointer.x) + Math.abs(targetY - pointer.y) > 0.3;
+        // The eroded front keeps wobbling while the pointer is around.
         const fading = Math.abs(pointer.target - pointer.strength) > 0.004;
-        if (moving || fading) frame = requestAnimationFrame(hoverFrame);
+        if (pointer.target > 0 || fading)
+          frame = requestAnimationFrame(hoverFrame);
       };
 
       const wake = () => {
@@ -581,15 +640,17 @@ export function PortraitReveal({
         if (event.pointerType !== "mouse") return;
         pointer.clientX = event.clientX;
         pointer.clientY = event.clientY;
-        // Active over the photo itself, not the whole box around it.
+        // Active over the photo and a margin around it, so the edges start
+        // reaching out as the pointer comes near.
         const [x, y, width, height] = layout.imageRect;
+        const margin = MAGNET_RADIUS * 0.6 * pixelRatio;
         const localX = (event.clientX - layout.left) * pixelRatio;
         const localY = (event.clientY - layout.top) * pixelRatio;
         const inside =
-          localX >= x &&
-          localX <= x + width &&
-          localY >= y &&
-          localY <= y + height;
+          localX >= x - margin &&
+          localX <= x + width + margin &&
+          localY >= y - margin &&
+          localY <= y + height + margin;
         pointer.target = inside ? 1 : 0;
         if (inside || pointer.strength > 0) wake();
       };
@@ -633,7 +694,15 @@ export function PortraitReveal({
       // Leaving it running would keep the image hidden under a stale canvas.
       if (host.dataset.intro === "running") host.dataset.intro = "done";
     };
-  }, [accent, cellSpacing, colorSrc, edgeSrc]);
+  }, [
+    accent,
+    cellSpacing,
+    colorSrc,
+    edgeSrc,
+    matrixMax,
+    matrixMin,
+    matrixReach,
+  ]);
 
   if (!mounted) return null;
   return (

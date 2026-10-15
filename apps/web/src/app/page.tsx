@@ -1,11 +1,13 @@
 import Image from "next/image";
 import { Suspense } from "react";
 import portrait from "../../public/portrait_3_white_bg_wider.png";
+import { Manifesto } from "@/components/manifesto";
 import { PixelMatrix } from "@/components/pixel-matrix";
 import {
   ProjectsLoading,
   ProjectsSection,
 } from "@/components/projects-section";
+import { SiteOutro } from "@/components/site-outro";
 
 export default function Home() {
   return (
@@ -52,12 +54,14 @@ export default function Home() {
 
         <div className="hero-bottom-blur" aria-hidden="true" />
       </section>
-      <div className="hero-project-transition" aria-hidden="true">
-        <div className="hero-transition-light" />
+      <div className="hero-night-transition" aria-hidden="true">
+        <div className="hero-night-glow" />
       </div>
+      <Manifesto />
       <Suspense fallback={<ProjectsLoading />}>
         <ProjectsSection />
       </Suspense>
+      <SiteOutro />
     </main>
   );
 }

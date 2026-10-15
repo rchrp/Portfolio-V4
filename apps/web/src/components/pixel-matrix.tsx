@@ -1,12 +1,23 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import {
+  computeEdgeMap,
+  rgbaToGrayscale,
+  type EdgeMap,
+} from "@/lib/edge-detection";
 
 type PixelCell = {
   x: number;
   y: number;
   opacity: number;
   edgeNoise: number;
+  /** Field level shown before the current transition, 0 to 1. */
+  from: number;
+  /** Field level reached at the end of the current transition. */
+  to: number;
+  /** Stagger of the current transition, 0 to 1. */
+  delay: number;
 };
 
 type PointerState = {
@@ -18,6 +29,14 @@ type PointerState = {
   targetStrength: number;
 };
 
+/** Fractions of the canvas where the field image is fitted. */
+export type FieldRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type PixelMatrixProps = {
   color?: string;
   cellSpacing?: number;
@@ -26,6 +45,105 @@ export type PixelMatrixProps = {
   maxScale?: number;
   edgeFade?: number;
   className?: string;
+  /** Plays the initial full-cell sweep. */
+  intro?: boolean;
+  /** Precomputed edge map (grayscale PNG) drawn by the cells. */
+  field?: string | null;
+  /** Image whose edge map is computed in the browser when `field` is missing. */
+  fieldSource?: string | null;
+  fieldRect?: FieldRect;
+  fieldFit?: "cover" | "contain";
+  /** Scale reached by cells on the strongest edges. */
+  fieldScale?: number;
+  /** Opacity of cells away from the field, relative to cells on it. */
+  restOpacity?: number;
+};
+
+const fullRect: FieldRect = { x: 0, y: 0, width: 1, height: 1 };
+const fieldWidth = 384;
+const fieldCache = new Map<string, Promise<EdgeMap | null>>();
+
+const loadImage = (src: string, crossOrigin: boolean) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    if (crossOrigin) image.crossOrigin = "anonymous";
+    image.decoding = "async";
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+
+const readPixels = (image: HTMLImageElement, width: number) => {
+  const height = Math.max(
+    1,
+    Math.round((width * image.naturalHeight) / Math.max(1, image.naturalWidth)),
+  );
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("2D canvas unavailable");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+  // Throws for cross-origin images served without CORS headers.
+  return {
+    width,
+    height,
+    rgba: context.getImageData(0, 0, width, height).data,
+  };
+};
+
+async function loadField(
+  field: string | null | undefined,
+  source: string | null | undefined,
+): Promise<EdgeMap | null> {
+  if (field) {
+    const image = await loadImage(field, false);
+    const { width, height, rgba } = readPixels(image, image.naturalWidth);
+    const data = new Uint8ClampedArray(width * height);
+    for (let index = 0; index < data.length; index += 1) {
+      data[index] = rgba[index * 4];
+    }
+    return { width, height, data };
+  }
+
+  if (!source) return null;
+  // Fallback for images added without running the edge-map script.
+  const image = await loadImage(source, !source.startsWith("/"));
+  const { width, height, rgba } = readPixels(image, fieldWidth);
+  return computeEdgeMap(rgbaToGrayscale(rgba, width, height), width, height);
+}
+
+function getField(
+  field: string | null | undefined,
+  source: string | null | undefined,
+) {
+  const key = field ?? source;
+  if (!key) return Promise.resolve(null);
+  if (!fieldCache.has(key)) {
+    fieldCache.set(
+      key,
+      loadField(field, source).catch(() => null),
+    );
+  }
+  return fieldCache.get(key)!;
+}
+
+const parseColor = (value: string): [number, number, number] => {
+  const hex = value.replace("#", "");
+  const full =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((digit) => digit + digit)
+          .join("")
+      : hex.padEnd(6, "0");
+  return [
+    parseInt(full.slice(0, 2), 16),
+    parseInt(full.slice(2, 4), 16),
+    parseInt(full.slice(4, 6), 16),
+  ];
 };
 
 const randomAt = (column: number, row: number, salt: number) => {
@@ -48,8 +166,24 @@ export function PixelMatrix({
   maxScale = 0.76,
   edgeFade = 120,
   className,
+  intro = true,
+  field,
+  fieldSource,
+  fieldRect = fullRect,
+  fieldFit = "cover",
+  fieldScale,
+  restOpacity = 1,
 }: PixelMatrixProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Props that change while mounted are read through refs: updating them
+  // morphs the matrix instead of rebuilding it (and replaying its intro).
+  const liveRef = useRef({ color, field, fieldSource, fieldRect, fieldFit });
+  const syncRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    liveRef.current = { color, field, fieldSource, fieldRect, fieldFit };
+    syncRef.current?.();
+  }, [color, field, fieldSource, fieldRect, fieldFit]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -68,11 +202,15 @@ export function PixelMatrix({
     const radius = Math.max(1, influenceRadius);
     const baseScale = clamp(minScale, 0.04, 0.9);
     const expandedScale = clamp(maxScale, baseScale, 0.96);
+    const fieldExpandedScale = clamp(fieldScale ?? maxScale, baseScale, 0.98);
+    const restAlpha = clamp(restOpacity, 0, 1);
     const fadeDistance = Math.max(0, edgeFade);
     const introDuration = 1250;
     const introSweepDuration = 760;
     const introCellDuration = 400;
     const introFullScale = 0.92;
+    const fieldSweepDuration = 720;
+    const fieldCellDuration = 560;
     const reducedMotionQuery = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     );
@@ -92,8 +230,101 @@ export function PixelMatrix({
     let isVisible = true;
     let isPointerInside = false;
     let prefersReducedMotion = reducedMotionQuery.matches;
-    let introComplete = prefersReducedMotion;
+    let introComplete = prefersReducedMotion || !intro;
     const introStartedAt = performance.now();
+    let edgeMap: EdgeMap | null = null;
+    let fieldKey: string | null = null;
+    let fieldStartedAt = -Infinity;
+    let fieldRequest = 0;
+    const currentColor = parseColor(liveRef.current.color);
+    let targetColor = currentColor.slice() as typeof currentColor;
+
+    const fieldTransitionActive = (timestamp: number) =>
+      timestamp - fieldStartedAt < fieldSweepDuration + fieldCellDuration;
+
+    const levelOf = (cell: PixelCell, timestamp: number) => {
+      if (cell.from === cell.to) return cell.to;
+      const progress = clamp(
+        (timestamp - fieldStartedAt - cell.delay * fieldSweepDuration) /
+          fieldCellDuration,
+        0,
+        1,
+      );
+      return cell.from + (cell.to - cell.from) * smoothstep(progress);
+    };
+
+    // Field level under a cell: blend of the mean and the maximum of the edge
+    // map over the cell footprint, so thin contours survive the downsampling.
+    const sampleField = (cell: PixelCell) => {
+      if (!edgeMap) return 0;
+      const rect = liveRef.current.fieldRect;
+      const rectX = rect.x * width;
+      const rectY = rect.y * height;
+      const rectWidth = rect.width * width;
+      const rectHeight = rect.height * height;
+      const localX = (cell.x - rectX) / rectWidth;
+      const localY = (cell.y - rectY) / rectHeight;
+
+      if (localX < 0 || localX > 1 || localY < 0 || localY > 1) return 0;
+
+      const scale =
+        liveRef.current.fieldFit === "contain"
+          ? Math.min(rectWidth / edgeMap.width, rectHeight / edgeMap.height)
+          : Math.max(rectWidth / edgeMap.width, rectHeight / edgeMap.height);
+      const offsetX = rectX + (rectWidth - edgeMap.width * scale) / 2;
+      const offsetY = rectY + (rectHeight - edgeMap.height * scale) / 2;
+      const centerX = (cell.x - offsetX) / scale;
+      const centerY = (cell.y - offsetY) / scale;
+      const half = Math.max(0.5, spacing / scale / 2);
+      const startX = Math.max(0, Math.floor(centerX - half));
+      const endX = Math.min(edgeMap.width - 1, Math.ceil(centerX + half));
+      const startY = Math.max(0, Math.floor(centerY - half));
+      const endY = Math.min(edgeMap.height - 1, Math.ceil(centerY + half));
+
+      if (startX > endX || startY > endY) return 0;
+
+      let sum = 0;
+      let maximum = 0;
+      let count = 0;
+      for (let y = startY; y <= endY; y += 1) {
+        for (let x = startX; x <= endX; x += 1) {
+          const value = edgeMap.data[y * edgeMap.width + x];
+          sum += value;
+          maximum = Math.max(maximum, value);
+          count += 1;
+        }
+      }
+
+      const feather =
+        smoothstep(clamp(Math.min(localX, 1 - localX) / 0.08, 0, 1)) *
+        smoothstep(clamp(Math.min(localY, 1 - localY) / 0.08, 0, 1));
+
+      return ((0.4 * sum) / count / 255 + (0.6 * maximum) / 255) * feather;
+    };
+
+    const retargetField = (animate: boolean) => {
+      const timestamp = performance.now();
+      const sweepOriginX = width * (0.35 + Math.random() * 0.3);
+      const sweepOriginY = height * 0.5;
+      const sweepRadius = Math.hypot(width, height) * 0.6;
+
+      for (const cell of cells) {
+        const target = sampleField(cell);
+        cell.from = animate ? levelOf(cell, timestamp) : target;
+        cell.to = target;
+        // Radial sweep with grain: the new image condenses out of the old one.
+        cell.delay = clamp(
+          (Math.hypot(cell.x - sweepOriginX, cell.y - sweepOriginY) /
+            sweepRadius) *
+            0.8 +
+            cell.edgeNoise * 0.2,
+          0,
+          1,
+        );
+      }
+
+      fieldStartedAt = animate && !prefersReducedMotion ? timestamp : -Infinity;
+    };
 
     const buildCells = () => {
       const columns = Math.ceil(width / spacing) + 2;
@@ -109,11 +340,15 @@ export function PixelMatrix({
             y: startY + row * spacing,
             opacity: 0.56 + randomAt(column, row, 5) * 0.34,
             edgeNoise: randomAt(column, row, 6),
+            from: 0,
+            to: 0,
+            delay: 0,
           });
         }
       }
 
       cells = nextCells;
+      retargetField(false);
     };
 
     const drawCell = (cell: PixelCell, scale: number, alpha: number) => {
@@ -135,7 +370,7 @@ export function PixelMatrix({
 
     const draw = (timestamp = performance.now()) => {
       context.clearRect(0, 0, width, height);
-      context.fillStyle = color;
+      context.fillStyle = `rgb(${currentColor.map(Math.round).join(" ")})`;
       const responsiveRadius = Math.min(radius, Math.max(170, width * 0.25));
       const introElapsed = timestamp - introStartedAt;
 
@@ -150,8 +385,11 @@ export function PixelMatrix({
           1,
         );
         const influence = smoothstep(proximity) * pointer.strength;
-        const interactiveScale =
-          baseScale + (expandedScale - baseScale) * influence;
+        const level = levelOf(cell, timestamp);
+        const interactiveScale = Math.max(
+          baseScale + (expandedScale - baseScale) * influence,
+          baseScale + (fieldExpandedScale - baseScale) * level,
+        );
         const distanceFromEdge = Math.min(
           cell.x,
           width - cell.x,
@@ -166,7 +404,9 @@ export function PixelMatrix({
             : 0.32 +
               smoothstep(clamp(irregularEdgeDistance / fadeDistance, 0, 1)) *
                 0.68;
-        const interactiveAlpha = cell.opacity * edgeOpacity;
+        const fieldOpacity =
+          restAlpha + (1 - restAlpha) * Math.max(level, influence * 0.6);
+        const interactiveAlpha = cell.opacity * edgeOpacity * fieldOpacity;
 
         if (introComplete) {
           drawCell(cell, interactiveScale, interactiveAlpha);
@@ -209,11 +449,17 @@ export function PixelMatrix({
       const positionEase = 0.19;
       const strengthEase =
         pointer.targetStrength > pointer.strength ? 0.22 : 0.12;
+      let colorDelta = 0;
 
       pointer.x += (pointer.targetX - pointer.x) * positionEase;
       pointer.y += (pointer.targetY - pointer.y) * positionEase;
       pointer.strength +=
         (pointer.targetStrength - pointer.strength) * strengthEase;
+      for (let channel = 0; channel < 3; channel += 1) {
+        currentColor[channel] +=
+          (targetColor[channel] - currentColor[channel]) * 0.08;
+        colorDelta += Math.abs(targetColor[channel] - currentColor[channel]);
+      }
       draw(timestamp);
 
       const positionDelta =
@@ -224,6 +470,8 @@ export function PixelMatrix({
       if (
         !introComplete ||
         strengthDelta > 0.006 ||
+        colorDelta > 0.5 ||
+        fieldTransitionActive(timestamp) ||
         (pointer.targetStrength > 0 && positionDelta > 0.15)
       ) {
         animationFrame = window.requestAnimationFrame(animate);
@@ -231,9 +479,41 @@ export function PixelMatrix({
     };
 
     const requestDraw = () => {
-      if (!animationFrame && isVisible && !prefersReducedMotion) {
+      if (prefersReducedMotion) {
+        draw();
+        return;
+      }
+
+      if (!animationFrame && isVisible) {
         animationFrame = window.requestAnimationFrame(animate);
       }
+    };
+
+    // Applies color and field props changed after mount.
+    const sync = () => {
+      const live = liveRef.current;
+      targetColor = parseColor(live.color);
+
+      if (prefersReducedMotion) {
+        currentColor.splice(0, 3, ...targetColor);
+      }
+
+      const nextKey = live.field ?? live.fieldSource ?? null;
+
+      if (nextKey === fieldKey) {
+        retargetField(false);
+        requestDraw();
+        return;
+      }
+
+      fieldKey = nextKey;
+      const request = ++fieldRequest;
+      void getField(live.field, live.fieldSource).then((map) => {
+        if (request !== fieldRequest) return;
+        edgeMap = map;
+        retargetField(true);
+        requestDraw();
+      });
     };
 
     const deactivatePointer = () => {
@@ -255,7 +535,7 @@ export function PixelMatrix({
         event.clientY <= bounds.bottom;
 
       if (!isInside) {
-        deactivatePointer();
+        if (isPointerInside) deactivatePointer();
         return;
       }
 
@@ -290,6 +570,11 @@ export function PixelMatrix({
       const bounds = canvas.getBoundingClientRect();
       const nextWidth = Math.max(1, bounds.width);
       const nextHeight = Math.max(1, bounds.height);
+
+      if (nextWidth === width && nextHeight === height) {
+        return;
+      }
+
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
       const pointerScaleX = width > 0 ? nextWidth / width : 1;
       const pointerScaleY = height > 0 ? nextHeight / height : 1;
@@ -325,6 +610,8 @@ export function PixelMatrix({
       introComplete = true;
       pointer.strength = 0;
       pointer.targetStrength = 0;
+      fieldStartedAt = -Infinity;
+      currentColor.splice(0, 3, ...targetColor);
 
       if (animationFrame) {
         window.cancelAnimationFrame(animationFrame);
@@ -360,9 +647,13 @@ export function PixelMatrix({
     window.addEventListener("blur", deactivatePointer);
     reducedMotionQuery.addEventListener("change", handleReducedMotionChange);
     resize();
+    syncRef.current = sync;
+    sync();
     requestDraw();
 
     return () => {
+      syncRef.current = null;
+      fieldRequest += 1;
       resizeObserver.disconnect();
       window.removeEventListener("resize", resize);
       intersectionObserver.disconnect();
@@ -379,7 +670,16 @@ export function PixelMatrix({
         window.cancelAnimationFrame(animationFrame);
       }
     };
-  }, [cellSpacing, color, edgeFade, influenceRadius, maxScale, minScale]);
+  }, [
+    cellSpacing,
+    edgeFade,
+    fieldScale,
+    influenceRadius,
+    intro,
+    maxScale,
+    minScale,
+    restOpacity,
+  ]);
 
   return (
     <canvas

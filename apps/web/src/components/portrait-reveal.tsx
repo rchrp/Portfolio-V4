@@ -25,6 +25,28 @@ void main() {
   gl_Position = vec4(aPosition, 0.0, 1.0);
 }`;
 
+// Timeline, in milliseconds.
+const EDGES = [80, 750] as const;
+const FILL = [650, 1200] as const;
+/** First cells start splitting; each split then takes SPLIT_DURATION. */
+const SPLIT_START = 1200;
+const SPLIT_DURATION = 190;
+/** Random wait before a cell splits, per depth; shorter where there is detail. */
+const SPLIT_SPREAD = [380, 260, 180, 130, 100] as const;
+const TINT = [1300, 2500] as const;
+const CLOSE_GAPS = [2400, 2850] as const;
+const SHARP = [2850, 3100] as const;
+const DURATION = 3150;
+/** Skip the intro if its textures take longer than this to arrive. */
+const LOAD_BUDGET = 2200;
+const MAX_DEPTH = SPLIT_SPREAD.length;
+
+const glslFloat = (value: number) => value.toFixed(1);
+
+// The portrait is a quadtree over the matrix grid: each cell splits on its
+// own schedule — sooner where the image has detail — and its four children
+// are born on top of it, then drift apart to their quadrants while they
+// shrink, with a slight overshoot. Finer cells take on the photo's colors.
 const fragmentShader = /* glsl */ `#version 300 es
 precision highp float;
 
@@ -34,6 +56,8 @@ uniform vec2 uResolution;
 uniform vec4 uImageRect;
 uniform vec2 uOrigin;
 uniform float uCell;
+uniform int uDepth;
+uniform float uTime;
 uniform float uEdgeReveal;
 uniform float uFill;
 uniform float uTint;
@@ -42,15 +66,56 @@ uniform float uSharp;
 uniform vec3 uAccent;
 out vec4 fragColor;
 
+const float SPLIT_START = ${glslFloat(SPLIT_START)};
+const float SPLIT_DURATION = ${glslFloat(SPLIT_DURATION)};
+const float SPREAD[${MAX_DEPTH}] = float[](${SPLIT_SPREAD.map(glslFloat).join(", ")});
+
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
-// Average of the texture over one cell, through its mipmaps; a finer
-// level keeps thin contours visible.
-vec4 sampleCell(sampler2D map, vec2 uv, float bias) {
-  float texels = uCell / uImageRect.z * float(textureSize(map, 0).x);
+float easeOut(float x) {
+  return 1.0 - pow(1.0 - x, 3.0);
+}
+
+float easeOutBack(float x) {
+  float t = x - 1.0;
+  return 1.0 + 1.9 * t * t * t + 0.9 * t * t;
+}
+
+// Average of a texture over a square of 'size' pixels, through its mipmaps.
+vec4 sampleArea(sampler2D map, vec2 center, float size, float bias) {
+  vec2 uv = (center - uImageRect.xy) / uImageRect.zw;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
+  float texels = size / uImageRect.z * float(textureSize(map, 0).x);
   return textureLod(map, uv, max(log2(max(texels, 1.0)) + bias, 0.0));
+}
+
+float detailAt(vec2 center, float size) {
+  return clamp(sampleArea(uEdges, center, size, -1.0).r * 2.5, 0.0, 1.0);
+}
+
+// When a cell splits: some time after its parent finished, less in detail.
+float splitTime(float after, vec2 id, int depth, vec2 center, float size) {
+  float wait = hash(id + vec2(float(depth) * 17.3, float(depth) * 7.1));
+  return after + wait * SPREAD[depth] * (1.0 - 0.7 * detailAt(center, size));
+}
+
+vec4 square(vec2 pixel, vec2 center, float halfSize, vec3 color, float alpha) {
+  vec2 cover = 1.0 - smoothstep(vec2(halfSize - 0.6), vec2(halfSize + 0.6), abs(pixel - center));
+  float a = cover.x * cover.y * alpha;
+  return vec4(color * a, a);
+}
+
+// Finer cells take on the photo's colors sooner.
+vec3 tinted(vec4 photo, int depth) {
+  float tint = clamp(uTint * 1.25 + float(depth) * 0.12 - 0.25, 0.0, 1.0);
+  return mix(uAccent, photo.rgb, tint);
+}
+
+// Opacity from coverage: empty cells must not leave an antialiased speck.
+float presence(float level) {
+  return smoothstep(0.02, 0.08, level);
 }
 
 void main() {
@@ -64,28 +129,56 @@ void main() {
     direct = vec4(texel.rgb * texel.a, texel.a);
   }
 
-  vec2 index = floor((pixel - uOrigin) / uCell + 0.5);
-  vec2 center = uOrigin + index * uCell;
-  vec2 uv = (center - uImageRect.xy) / uImageRect.zw;
+  vec2 id = floor((pixel - uOrigin) / uCell + 0.5);
+  vec2 center = uOrigin + id * uCell;
+  float size = uCell;
   vec4 cells = vec4(0.0);
+  float splitAt = splitTime(SPLIT_START, id, 0, center, size);
 
-  if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0)))) {
-    vec4 photo = sampleCell(uPhoto, uv, 0.0);
-    float edge = clamp(sampleCell(uEdges, uv, -1.5).r * 3.2, 0.0, 1.0);
-    float noise = hash(index);
-    // Edge cells pop in at random; the silhouette then fills cell by cell.
+  if (uTime < splitAt) {
+    // Matrix cells: edges pop in at random, then the silhouette fills.
+    vec4 photo = sampleArea(uPhoto, center, size, 0.0);
+    float edge = clamp(sampleArea(uEdges, center, size, -1.5).r * 3.2, 0.0, 1.0);
+    float noise = hash(id);
     float edges = edge * smoothstep(noise, noise + 0.2, uEdgeReveal * 1.2);
     float fill = smoothstep(noise * 0.6, noise * 0.6 + 0.4, uFill);
     float level = mix(edges, photo.a, fill);
+    cells = square(pixel, center, level * uSquare * size * 0.5, tinted(photo, 0), presence(level) * 0.92);
+  } else {
+    for (int depth = 0; depth < ${MAX_DEPTH}; depth++) {
+      float progress = clamp((uTime - splitAt) / SPLIT_DURATION, 0.0, 1.0);
+      float childSize = size * 0.5;
+      bool leaves = depth >= uDepth - 1;
 
-    float halfSize = level * uSquare * 0.5;
-    vec2 local = abs(pixel - center) / uCell;
-    float aa = 0.6 / uCell;
-    vec2 cover = 1.0 - smoothstep(vec2(halfSize - aa), vec2(halfSize + aa), local);
-    // smoothstep on level: empty cells must not leave an antialiased speck.
-    float alpha = cover.x * cover.y * smoothstep(0.02, 0.08, level) * mix(0.9, 1.0, uTint);
-    vec3 color = mix(uAccent, photo.rgb, uTint);
-    cells = vec4(color * alpha, alpha);
+      if (progress < 1.0 || leaves) {
+        // Splitting: four children slide out of the parent and shrink.
+        float slide = easeOutBack(progress);
+        float shrink = easeOut(progress);
+        for (int quadrant = 0; quadrant < 4; quadrant++) {
+          vec2 direction = vec2(float(quadrant & 1), float(quadrant >> 1)) - 0.5;
+          vec2 target = center + direction * childSize;
+          vec4 photo = sampleArea(uPhoto, target, childSize, 0.0);
+          vec2 position = mix(center, target, slide);
+          float halfSize = mix(size, childSize, shrink) * 0.5 * uSquare * photo.a;
+          vec4 child = square(pixel, position, halfSize, tinted(photo, depth + 1), presence(photo.a));
+          cells += child * (1.0 - cells.a);
+        }
+        break;
+      }
+
+      // Split done: follow the child under this pixel.
+      vec2 quadrant = step(center, pixel);
+      center += (quadrant - 0.5) * childSize;
+      size = childSize;
+      id = id * 2.0 + quadrant;
+      splitAt = splitTime(splitAt + SPLIT_DURATION, id, depth + 1, center, size);
+
+      if (uTime < splitAt) {
+        vec4 photo = sampleArea(uPhoto, center, size, 0.0);
+        cells = square(pixel, center, size * 0.5 * uSquare * photo.a, tinted(photo, depth + 1), presence(photo.a));
+        break;
+      }
+    }
   }
 
   fragColor = mix(cells, direct, uSharp);
@@ -105,17 +198,6 @@ const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 const ease = (value: number) => value * value * (3 - 2 * value);
 const phase = (time: number, start: number, end: number) =>
   ease(clamp01((time - start) / (end - start)));
-
-// Timeline, in milliseconds.
-const EDGES = [80, 800] as const;
-const FILL = [700, 1300] as const;
-const SHRINK = [1150, 2150] as const;
-const TINT = [1250, 2050] as const;
-const CLOSE_GAPS = [1650, 2150] as const;
-const SHARP = [2100, 2400] as const;
-const DURATION = 2450;
-/** Skip the intro if its textures take longer than this to arrive. */
-const LOAD_BUDGET = 2200;
 
 function compile(gl: WebGL2RenderingContext, type: number, source: string) {
   const shader = gl.createShader(type)!;
@@ -252,6 +334,8 @@ export function PortraitReveal({
         imageRect: uniform("uImageRect"),
         origin: uniform("uOrigin"),
         cell: uniform("uCell"),
+        depth: uniform("uDepth"),
+        time: uniform("uTime"),
         edgeReveal: uniform("uEdgeReveal"),
         fill: uniform("uFill"),
         tint: uniform("uTint"),
@@ -311,16 +395,12 @@ export function PortraitReveal({
             area.top + (area.height - (rows - 1) * spacing) / 2 - bounds.top;
         }
 
-        // Resolution doubles step by step, like a progressive image.
-        const firstCell = spacing * pixelRatio;
-        const steps = Math.max(1, Math.floor(Math.log2(firstCell)));
-        const step = Math.min(
-          steps,
-          Math.floor(
-            clamp01((time - SHRINK[0]) / (SHRINK[1] - SHRINK[0])) * (steps + 1),
-          ),
+        // Root cells sit on the hero matrix; leaves end up about 1 px wide.
+        const cell = spacing * pixelRatio;
+        const depth = Math.min(
+          MAX_DEPTH,
+          Math.max(1, Math.floor(Math.log2(cell))),
         );
-        const cell = firstCell / 2 ** step;
 
         context.viewport(0, 0, width, height);
         context.clear(context.COLOR_BUFFER_BIT);
@@ -337,7 +417,9 @@ export function PortraitReveal({
           originX * pixelRatio,
           originY * pixelRatio,
         );
-        context.uniform1f(uniforms.cell, Math.max(1, cell));
+        context.uniform1f(uniforms.cell, cell);
+        context.uniform1i(uniforms.depth, depth);
+        context.uniform1f(uniforms.time, time);
         context.uniform1f(uniforms.edgeReveal, phase(time, ...EDGES));
         context.uniform1f(uniforms.fill, phase(time, ...FILL));
         context.uniform1f(uniforms.tint, phase(time, ...TINT));

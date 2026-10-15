@@ -384,7 +384,7 @@ body {
 
   .hero-portrait[data-intro="pending"] .hero-portrait-image {
     opacity: 0;
-    animation: hero-portrait-failsafe 500ms ease 3.2s forwards;
+    animation: hero-portrait-failsafe 500ms ease 3.8s forwards;
   }
 
   .hero-portrait[data-intro="running"] .hero-portrait-image {
@@ -393,7 +393,7 @@ body {
 
   /* The matrix wakes up once the portrait has been drawn. */
   .hero-matrix {
-    animation: hero-fade-in 1400ms ease 1500ms both;
+    animation: hero-fade-in 1400ms ease 1800ms both;
   }
 
   .hero-actions {

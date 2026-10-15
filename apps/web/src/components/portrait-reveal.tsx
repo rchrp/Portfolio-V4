@@ -119,10 +119,15 @@ vec4 square(vec2 pixel, vec2 center, float halfSize, vec3 color, float alpha) {
   return vec4(color * a, a);
 }
 
+// The photo texture is premultiplied: recover its color.
+vec3 colorOf(vec4 photo) {
+  return photo.rgb / max(photo.a, 0.001);
+}
+
 // Finer cells take on the photo's colors sooner.
 vec3 tinted(vec4 photo, int depth) {
   float tint = clamp(uTint * 1.25 + float(depth) * 0.12 - 0.25, 0.0, 1.0);
-  return mix(uAccent, photo.rgb, tint);
+  return mix(uAccent, colorOf(photo), tint);
 }
 
 // Opacity from coverage: empty cells must not leave an antialiased speck.
@@ -189,8 +194,12 @@ vec4 nibbledEdges(vec2 pixel, vec4 direct) {
   // middle of the silhouette is never reached.
   float drift = valueNoise(id * 0.3 + uTime * 0.0004) - 0.5;
   float scatter = hash(id) - 0.5;
-  float front = 0.5 + pull * (0.42 + drift * 0.2 + scatter * 0.14);
+  // Capped: the blurred depth saturates near 1 inside, which stays intact.
+  float front = min(0.5 + pull * (0.42 + drift * 0.2 + scatter * 0.14), 0.88);
   float eaten = smoothstep(0.0, 0.14, front - depth);
+  // Cells mostly outside the silhouette never show as photo pixels: within
+  // the eroded band they go straight to matrix cells.
+  if (eaten > 0.0) eaten = max(eaten, 1.0 - smoothstep(0.5, 0.85, photo.a));
   if (eaten <= 0.0) return vec4(0.0);
 
   // Matrix cell, as the background draws it near the pointer.
@@ -200,7 +209,7 @@ vec4 nibbledEdges(vec2 pixel, vec4 direct) {
   float matrixAlpha = (0.56 + hash(id + 7.7) * 0.34) * matrixFade(center.y);
 
   float scale = mix(0.94, matrixScale, eaten);
-  vec3 color = mix(photo.rgb, uAccent, eaten);
+  vec3 color = mix(colorOf(photo), uAccent, eaten);
   float alpha = mix(1.0, matrixAlpha, eaten);
   vec4 cell = square(pixel, center, uCell * 0.5 * scale, color, alpha * presence(photo.a));
 
@@ -220,7 +229,7 @@ void main() {
   vec4 direct = vec4(0.0);
   if (all(greaterThanEqual(pixelUv, vec2(0.0))) && all(lessThanEqual(pixelUv, vec2(1.0)))) {
     vec4 texel = texture(uPhoto, pixelUv);
-    direct = vec4(texel.rgb * texel.a, texel.a);
+    direct = texel;
   }
 
   if (uMode == 1) {
@@ -309,10 +318,16 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string) {
   return shader;
 }
 
-function createTexture(gl: WebGL2RenderingContext, image: HTMLImageElement) {
+function createTexture(
+  gl: WebGL2RenderingContext,
+  image: HTMLImageElement,
+  premultiply = false,
+) {
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  // Premultiplied, mipmaps average colors without the transparent texels.
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premultiply);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
   gl.generateMipmap(gl.TEXTURE_2D);
   gl.texParameteri(
@@ -416,7 +431,7 @@ export function PortraitReveal({
       context.vertexAttribPointer(position, 2, context.FLOAT, false, 0, 0);
 
       context.activeTexture(context.TEXTURE0);
-      const photoTexture = createTexture(context, photo);
+      const photoTexture = createTexture(context, photo, true);
       context.activeTexture(context.TEXTURE1);
       const edgeTexture = createTexture(context, edges);
       resources.push(() => {

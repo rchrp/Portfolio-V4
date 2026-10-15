@@ -166,19 +166,19 @@ float silhouetteDepth(vec2 center) {
   );
 }
 
-// The silhouette's edges dissolve into the hero matrix, on the lower third
-// of the portrait only. The deeper the pointer goes into the silhouette,
-// the further the matrix eats in from the contour — more on the side of the
-// pointer, as if drawn to it — without ever reaching the middle.
-// Cells sit on the matrix grid; at the front they are pixels of the photo,
-// behind it they become the matrix's own orange cells.
+// The bottom of the visible photo and the silhouette's sides dissolve into
+// the hero matrix, over the lower third of the portrait only. The closer the
+// pointer gets to the middle of the photo, the further the matrix eats in —
+// a little more on the pointer's side, as if drawn to it — without ever
+// reaching the middle. Cells sit on the matrix grid; at the front they are
+// pixels of the photo, behind it they become the matrix's own orange cells.
 vec4 nibbledEdges(vec2 pixel, vec4 direct) {
   vec2 id = floor((pixel - uOrigin) / uCell + 0.5);
   vec2 center = uOrigin + id * uCell;
 
-  // Fades in over the lower third of the visible photo; the rest stays
-  // intact.
-  float visibleHeight = min(uImageRect.y + uImageRect.w, uVisibleBottom) - uImageRect.y;
+  // Lower third of the visible photo; the rest stays intact.
+  float visibleBottom = min(uImageRect.y + uImageRect.w, uVisibleBottom);
+  float visibleHeight = visibleBottom - uImageRect.y;
   float row = (center.y - uImageRect.y) / visibleHeight;
   float lower = smoothstep(0.65, 0.85, row);
   if (lower <= 0.0) return vec4(0.0);
@@ -186,21 +186,28 @@ vec4 nibbledEdges(vec2 pixel, vec4 direct) {
   vec4 photo = sampleArea(uPhoto, center, uCell, 0.0);
   if (photo.a < 0.04) return vec4(0.0);
 
-  // How far the pointer is inside the silhouette drives the whole effect.
-  float reach = mix(0.12, 1.0, smoothstep(0.5, 0.95, silhouetteDepth(uPointer)));
-  float attraction = mix(0.45, 1.0, 1.0 - smoothstep(0.0, uRadius, distance(center, uPointer)));
-  float pull = reach * attraction * lower * uStrength;
+  // Intensity grows as the pointer nears the middle of the visible photo;
+  // anywhere over the photo it already nibbles a little.
+  vec2 middle = vec2(uImageRect.x + uImageRect.z * 0.5, uImageRect.y + visibleHeight * 0.5);
+  float halfDiagonal = 0.5 * length(vec2(uImageRect.z, visibleHeight));
+  float centered = 1.0 - smoothstep(0.0, halfDiagonal, distance(uPointer, middle));
+  float intensity = mix(0.3, 1.0, centered);
+  float attraction = mix(0.7, 1.0, 1.0 - smoothstep(0.0, uRadius, distance(center, uPointer)));
+  float pull = intensity * attraction * lower * uStrength;
   if (pull <= 0.001) return vec4(0.0);
 
-  float depth = silhouetteDepth(center);
+  // Distance to the nearest edge, on the same 0.5 (edge) → 1 (inside) scale
+  // for the silhouette's contour and for the bottom of the visible photo.
+  float fromBottom = 0.5 + 0.5 * clamp((visibleBottom - center.y) / (visibleHeight * 0.35), 0.0, 1.0);
+  float depth = min(silhouetteDepth(center), fromBottom);
+
   // Ragged front: slow drifting noise plus per-cell scatter, so neighbors
   // along the edge are not eaten at the same time. Capped below 1: the
   // middle of the silhouette is never reached.
   float drift = valueNoise(id * 0.3 + uTime * 0.0004) - 0.5;
   float scatter = hash(id) - 0.5;
-  // Capped: the blurred depth saturates near 1 inside, which stays intact.
-  float front = min(0.5 + pull * (0.56 + drift * 0.2 + scatter * 0.14), 0.9);
-  float eaten = smoothstep(0.0, 0.14, front - depth);
+  float front = min(0.5 + pull * (0.44 + drift * 0.16 + scatter * 0.12), 0.92);
+  float eaten = smoothstep(0.0, 0.06, front - depth);
   // Cells mostly outside the silhouette never show as photo pixels: within
   // the eroded band they go straight to matrix cells.
   if (eaten > 0.0) eaten = max(eaten, 1.0 - smoothstep(0.5, 0.85, photo.a));

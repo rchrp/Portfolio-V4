@@ -19,11 +19,11 @@ export const projectsChapter = {
 // Public contact details, shown in the hero and the outro. Each one is
 // displayed only once it is set.
 export const contact = {
-  email: "",
+  email: "raphael@rchrp.fr",
   /** Displayed as written, e.g. "+33 6 12 34 56 78". */
-  phone: "",
-  linkedin: "",
-  github: "",
+  phone: "+33 6 67 28 12 29",
+  linkedin: "https://www.linkedin.com/in/raphael-charpentier-38b51720b",
+  github: "https://github.com/rchrp",
 };
 
 export const outro = {

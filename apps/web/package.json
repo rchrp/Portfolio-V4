@@ -34,6 +34,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",
+    "sharp": "0.35.3",
     "tailwind-merge": "^3.6.0",
     "three": "0.186.0",
     "zod": "^4.6.7"
@@ -52,7 +53,6 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.6",
     "prisma": "^7.9.1",
-    "sharp": "0.35.3",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

@@ -99,7 +99,8 @@ async function loadField(
   source: string | null | undefined,
 ): Promise<EdgeMap | null> {
   if (field) {
-    const image = await loadImage(field, false);
+    // Remote edge maps (uploaded to S3) need CORS to be read back.
+    const image = await loadImage(field, !field.startsWith("/"));
     const { width, height, rgba } = readPixels(image, image.naturalWidth);
     const data = new Uint8ClampedArray(width * height);
     for (let index = 0; index < data.length; index += 1) {

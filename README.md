@@ -66,7 +66,7 @@ pnpm --filter web edges public/projects/new.png # specific files under public/
 pnpm --filter web edges https://example.com/cover.jpg
 ```
 
-Projects whose image has no edge map fall back to computing it in the browser (remote images need CORS headers). The portrait also gets a light color texture (`*-color.webp`, 960 px) used by the hero intro.
+Covers uploaded from the [admin panel](#images) get their edge map at upload time, stored next to the image (`<name>.edges.png`) and found by that naming convention, so they need no script run. Projects whose image has no edge map fall back to computing it in the browser (remote images need CORS headers). The portrait also gets a light color texture (`*-color.webp`, 960 px) used by the hero intro.
 
 ### 3D model
 
@@ -137,11 +137,42 @@ Lost every passkey? Run `pnpm admin:invite` again: shell access to the server is
 - **Sessions**: a random 256-bit token in an HttpOnly, `SameSite=Strict`, `__Host-` cookie (over HTTPS). Only its SHA-256 is stored, so a database leak does not leak sessions. Sessions end after 2 hours of inactivity or 12 hours at most, can be revoked from **Sécurité**, and disappear with the passkey that opened them.
 - **Authorization**: every admin page and every Server Action calls `requireAdmin()`, which checks the session against the database. `src/proxy.ts` only redirects early; it is not the gate. Next.js rejects Server Action requests from another origin.
 - **Input**: every write is validated with zod on the server (`src/lib/admin/project-form.ts`); URLs are restricted to `http(s)` or local `/public` paths, then the database CHECK constraints apply.
+- **Uploads**: see [Images](#images). The file's real type is read from its first bytes, the image is decoded and re-encoded, and its name is generated server side.
 - **Abuse**: sign-in and enrollment are rate limited per address (in memory, so per server instance), and the number of pending challenges is capped.
 - **Headers**: admin responses carry a nonce-based Content Security Policy, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `noindex` and `no-referrer`.
 - **Audit**: sign-ins (successful or refused), passkey and session changes and every project change are listed in **Sécurité** with their address. Behind a reverse proxy, make sure it sets `X-Forwarded-For`.
 
-Images are referenced by path (`/projects/<slug>/…` under `apps/web/public/`) or by HTTPS URL; there is no upload yet. Run `pnpm --filter web edges` after adding a cover image.
+### Images
+
+In **Visuels**, the cover and each screenshot have an **Importer** button, and accept an image dropped on them; **Importer des captures** (or a drop on the gallery) adds several screenshots at once. The field is filled in, the thumbnail and the live preview follow, and the project still has to be saved. A path under `apps/web/public/` or an HTTPS URL can still be typed instead.
+
+The upload is a Server Action (`src/app/admin/_actions/uploads.ts`, then `src/lib/admin/uploads.ts`):
+
+1. `requireAdmin()` runs first; Next.js rejects calls from another origin.
+2. PNG, JPEG or WebP only, recognized by their magic bytes and confirmed by the decoder (an SVG, a GIF or a renamed file is refused); 8 MB and 50 megapixels at most. `next.config.ts` raises the Server Action body limit to 9 MB for this, for every Server Action.
+3. sharp applies the EXIF orientation, fits the image within 2400 px and re-encodes it to WebP, which drops EXIF (GPS included), ICC and XMP metadata.
+4. The file is stored as `projects/<slug>/<24 random hex>.webp`: the slug must match `^[a-z0-9]+(-[a-z0-9]+)*$`, and nothing else from the client reaches the path. Uploading needs a valid slug; an image keeps its folder if the slug changes later.
+5. A cover also gets its pixel-matrix edge map, `<same name>.edges.png`, used by the site without running `pnpm --filter web edges`. Images that are neither uploaded nor listed by that script still fall back to the browser.
+
+Uploads are logged in the audit trail. Replaced or removed images are not deleted.
+
+#### Storage in production
+
+By default images are written to `apps/web/public/projects/<slug>/`. That suits a server with a persistent disk: `next start` only serves the `public/` files present when it started, so `src/app/projects/[slug]/[file]/route.ts` serves the newer uploads (generated names only) until the next restart. In development, commit the uploaded files like any other project image.
+
+On a host whose filesystem is ephemeral or read-only (serverless, most containers), use an S3-compatible bucket (AWS S3, Cloudflare R2, Scaleway, MinIO…) instead:
+
+```bash
+UPLOAD_STORAGE="s3"
+S3_ENDPOINT="https://<account>.r2.cloudflarestorage.com"  # path-style requests
+S3_REGION="auto"                                          # e.g. "eu-west-3" on AWS
+S3_BUCKET="portfolio-images"
+S3_ACCESS_KEY_ID="…"                                      # write access to this bucket only
+S3_SECRET_ACCESS_KEY="…"
+S3_PUBLIC_URL="https://images.example.com"                # public base URL of the bucket
+```
+
+Objects are written with a one-year immutable `Cache-Control` and saved in the project as `https://` URLs, which the admin CSP already allows (`img-src https:`). For the pixel matrix to read a cover's edge map from another origin, the bucket must send CORS headers allowing `GET` from the site's origin.
 
 ## Third-party assets and credits
 

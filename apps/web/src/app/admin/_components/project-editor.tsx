@@ -5,10 +5,12 @@ import {
   ChevronDown,
   ChevronUp,
   CircleAlert,
+  ImagePlus,
   LoaderCircle,
   Plus,
   Save,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -22,6 +24,11 @@ import {
 } from "react";
 import { projectPeriod, publicUrl } from "@/lib/projects";
 import {
+  MAX_UPLOAD_BYTES,
+  SLUG_PATTERN,
+  UPLOAD_TYPES,
+} from "@/lib/uploaded-images";
+import {
   kindLabels,
   linkKindLabels,
   projectKinds,
@@ -33,6 +40,7 @@ import {
   type ProjectFormValues,
 } from "@/lib/admin/project-form";
 import { deleteProjectAction, saveProjectAction } from "../_actions/projects";
+import { uploadProjectImageAction } from "../_actions/uploads";
 import { ConfirmButton } from "./confirm-dialog";
 
 type Values = ProjectFormValues;
@@ -131,6 +139,33 @@ export function ProjectEditor({
       router.replace("/admin");
     }
   }
+
+  // Uploads resolve later: apply them to the latest values, not a snapshot.
+  const editMedia = useCallback(
+    (edit: (media: Values["media"]) => Values["media"]) => {
+      setValues((current) => ({ ...current, media: edit(current.media) }));
+      setState((current) =>
+        current.kind === "saved" ? { kind: "idle" } : current,
+      );
+    },
+    [],
+  );
+  const appendMedia = useCallback(
+    (url: string) =>
+      editMedia((media) =>
+        media.length >= MAX_MEDIA
+          ? media
+          : [...media, { url, alt: "", caption: "" }],
+      ),
+    [editMedia],
+  );
+  const setMediaUrl = useCallback(
+    (index: number, url: string) =>
+      editMedia((media) =>
+        media.map((item, at) => (at === index ? { ...item, url } : item)),
+      ),
+    [editMedia],
+  );
 
   const error = (path: string) => errors[path];
 
@@ -392,17 +427,24 @@ export function ProjectEditor({
               label="Image de couverture"
               wide
               error={error("imageUrl")}
-              hint="Chemin dans /public (ex. /projects/blame/cover.webp) ou URL https."
+              hint="Importée, ou un chemin dans /public (ex. /projects/blame/cover.webp) ou une URL https. Paysage, environ 16:9."
             >
               {(props) => (
-                <input
-                  {...props}
-                  className="adm-input is-mono"
-                  value={values.imageUrl ?? ""}
-                  onChange={(event) => set("imageUrl", event.target.value)}
-                  placeholder="/projects/…"
-                  spellCheck={false}
-                />
+                <ImageDrop
+                  url={values.imageUrl}
+                  slug={values.slug}
+                  purpose="cover"
+                  onUploaded={(url) => set("imageUrl", url)}
+                >
+                  <input
+                    {...props}
+                    className="adm-input is-mono"
+                    value={values.imageUrl ?? ""}
+                    onChange={(event) => set("imageUrl", event.target.value)}
+                    placeholder="/projects/…"
+                    spellCheck={false}
+                  />
+                </ImageDrop>
               )}
             </Field>
             <Field
@@ -422,48 +464,55 @@ export function ProjectEditor({
               )}
             </Field>
           </div>
-          <div className="adm-gallery">
+          <GalleryDrop
+            slug={values.slug}
+            room={MAX_MEDIA - values.media.length}
+            onUploaded={appendMedia}
+          >
             <p className="adm-label">
               Galerie
-              <small>{values.media.length}/20</small>
+              <small>
+                {values.media.length}/{MAX_MEDIA}
+              </small>
             </p>
             <ObjectList
               items={values.media}
               onChange={(items) => set("media", items)}
-              max={20}
+              max={MAX_MEDIA}
               blank={{ url: "", alt: "", caption: "" }}
               addLabel="Ajouter une capture"
               render={(item, index, update) => (
-                <div className="adm-repeat-fields is-media">
-                  <div className="adm-media-thumb">
-                    <Thumbnail url={item.url} />
-                  </div>
-                  <div className="adm-repeat-fields">
-                    <InlineInput
-                      label="URL"
-                      value={item.url}
-                      onChange={(url) => update({ ...item, url })}
-                      error={error(`media.${index}.url`)}
-                      mono
-                      placeholder="/projects/…"
-                    />
-                    <InlineInput
-                      label="Texte alternatif"
-                      value={item.alt}
-                      onChange={(alt) => update({ ...item, alt })}
-                      error={error(`media.${index}.alt`)}
-                    />
-                    <InlineInput
-                      label="Légende (facultative)"
-                      value={item.caption ?? ""}
-                      onChange={(caption) => update({ ...item, caption })}
-                      error={error(`media.${index}.caption`)}
-                    />
-                  </div>
-                </div>
+                <ImageDrop
+                  url={item.url}
+                  slug={values.slug}
+                  purpose="media"
+                  compact
+                  onUploaded={(url) => setMediaUrl(index, url)}
+                >
+                  <InlineInput
+                    label="URL"
+                    value={item.url}
+                    onChange={(url) => update({ ...item, url })}
+                    error={error(`media.${index}.url`)}
+                    mono
+                    placeholder="/projects/…"
+                  />
+                  <InlineInput
+                    label="Texte alternatif"
+                    value={item.alt}
+                    onChange={(alt) => update({ ...item, alt })}
+                    error={error(`media.${index}.alt`)}
+                  />
+                  <InlineInput
+                    label="Légende (facultative)"
+                    value={item.caption ?? ""}
+                    onChange={(caption) => update({ ...item, caption })}
+                    error={error(`media.${index}.caption`)}
+                  />
+                </ImageDrop>
               )}
             />
-          </div>
+          </GalleryDrop>
         </Section>
 
         <Section index="07" title="Liens">
@@ -662,6 +711,7 @@ export function ProjectEditor({
 }
 
 const ongoing = (values: Values) => !values.endedOn;
+const MAX_MEDIA = 20;
 
 // ─── Building blocks ─────────────────────────────────────────────────────────
 
@@ -1052,6 +1102,249 @@ function TagInput({
       </div>
       {error && <FieldError message={error} />}
     </div>
+  );
+}
+
+// ─── Image upload ────────────────────────────────────────────────────────────
+
+type UploadState =
+  | { kind: "idle" }
+  | { kind: "uploading"; count: number }
+  | { kind: "error"; message: string };
+
+/** Checks one file, sends it, and returns its URL (or null, with the reason). */
+function useImageUpload(slug: string, purpose: "cover" | "media") {
+  const [state, setState] = useState<UploadState>({ kind: "idle" });
+
+  const upload = useCallback(
+    async (files: File[], onUploaded: (url: string) => void) => {
+      if (!SLUG_PATTERN.test(slug)) {
+        setState({
+          kind: "error",
+          message: "Renseignez un slug valide avant d’importer.",
+        });
+        return;
+      }
+      for (const [index, file] of files.entries()) {
+        // The server sniffs the real type; some systems send none at all.
+        const problem =
+          file.type && !UPLOAD_TYPES.includes(file.type)
+            ? "Formats acceptés : PNG, JPEG, WebP."
+            : file.size > MAX_UPLOAD_BYTES
+              ? "8 Mo au maximum par image."
+              : null;
+        if (problem) {
+          setState({ kind: "error", message: `${file.name} : ${problem}` });
+          return;
+        }
+        setState({ kind: "uploading", count: files.length - index });
+        const data = new FormData();
+        data.set("slug", slug);
+        data.set("purpose", purpose);
+        data.set("file", file);
+        try {
+          const result = await uploadProjectImageAction(data);
+          if (!result.ok) {
+            setState({ kind: "error", message: result.error });
+            return;
+          }
+          onUploaded(result.url);
+        } catch {
+          setState({
+            kind: "error",
+            message: "Le serveur ne répond pas. Réessayez.",
+          });
+          return;
+        }
+      }
+      setState({ kind: "idle" });
+    },
+    [purpose, slug],
+  );
+
+  return { state, upload };
+}
+
+/** Drag-and-drop target: highlights while image files hover over it. */
+function useFileDrop(onFiles: (files: File[]) => void, enabled: boolean) {
+  const [over, setOver] = useState(false);
+  const accepts = (event: React.DragEvent) =>
+    enabled && event.dataTransfer.types.includes("Files");
+  return {
+    over,
+    handlers: {
+      onDragOver: (event: React.DragEvent) => {
+        if (!accepts(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "copy";
+        setOver(true);
+      },
+      onDragLeave: (event: React.DragEvent) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOver(false);
+        }
+      },
+      onDrop: (event: React.DragEvent) => {
+        if (!accepts(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setOver(false);
+        onFiles(Array.from(event.dataTransfer.files));
+      },
+    },
+  };
+}
+
+function ImageDrop({
+  url,
+  slug,
+  purpose,
+  compact,
+  onUploaded,
+  children,
+}: {
+  url: string | null | undefined;
+  slug: string;
+  purpose: "cover" | "media";
+  compact?: boolean;
+  onUploaded: (url: string) => void;
+  children: ReactNode;
+}) {
+  const picker = useRef<HTMLInputElement>(null);
+  const { state, upload } = useImageUpload(slug, purpose);
+  const busy = state.kind === "uploading";
+  const take = (files: File[]) => {
+    if (files.length && !busy) void upload(files.slice(0, 1), onUploaded);
+  };
+  const { over, handlers } = useFileDrop(take, !busy);
+
+  return (
+    <div
+      className={`adm-upload${compact ? " is-compact" : ""}${over ? " is-over" : ""}`}
+      {...handlers}
+    >
+      <div className="adm-upload-side">
+        <div className="adm-media-thumb adm-upload-thumb">
+          {url ? (
+            <Thumbnail url={url} />
+          ) : (
+            <ImagePlus className="adm-upload-empty" aria-hidden="true" />
+          )}
+          {busy && (
+            <span className="adm-upload-busy">
+              <LoaderCircle className="adm-spin" aria-hidden="true" />
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="adm-button adm-button-sm"
+          onClick={() => picker.current?.click()}
+          disabled={busy}
+        >
+          <Upload aria-hidden="true" />
+          {busy ? "Import…" : "Importer"}
+        </button>
+        <input
+          ref={picker}
+          type="file"
+          accept={UPLOAD_TYPES.join(",")}
+          hidden
+          tabIndex={-1}
+          onChange={(event) => {
+            take(Array.from(event.target.files ?? []));
+            event.target.value = "";
+          }}
+        />
+      </div>
+      <div className="adm-upload-fields">
+        {children}
+        {!compact && (
+          <span className="adm-hint">
+            Glissez une image ici · PNG, JPEG ou WebP, 8 Mo max · convertie en
+            WebP, métadonnées retirées.
+          </span>
+        )}
+        <UploadStatus state={state} />
+      </div>
+    </div>
+  );
+}
+
+/** Wraps the gallery: dropped or picked files become new screenshots. */
+function GalleryDrop({
+  slug,
+  room,
+  onUploaded,
+  children,
+}: {
+  slug: string;
+  room: number;
+  onUploaded: (url: string) => void;
+  children: ReactNode;
+}) {
+  const picker = useRef<HTMLInputElement>(null);
+  const { state, upload } = useImageUpload(slug, "media");
+  const busy = state.kind === "uploading";
+  const take = (files: File[]) => {
+    if (files.length && !busy && room > 0) {
+      void upload(files.slice(0, room), onUploaded);
+    }
+  };
+  const { over, handlers } = useFileDrop(take, !busy && room > 0);
+
+  return (
+    <div className={`adm-gallery${over ? " is-over" : ""}`} {...handlers}>
+      {children}
+      {room > 0 && (
+        <div className="adm-gallery-import">
+          <button
+            type="button"
+            className="adm-button"
+            onClick={() => picker.current?.click()}
+            disabled={busy}
+          >
+            {busy ? (
+              <LoaderCircle className="adm-spin" aria-hidden="true" />
+            ) : (
+              <Upload aria-hidden="true" />
+            )}
+            Importer des captures
+          </button>
+          <span className="adm-hint">ou glissez-les sur la galerie.</span>
+          <input
+            ref={picker}
+            type="file"
+            accept={UPLOAD_TYPES.join(",")}
+            multiple
+            hidden
+            tabIndex={-1}
+            onChange={(event) => {
+              take(Array.from(event.target.files ?? []));
+              event.target.value = "";
+            }}
+          />
+        </div>
+      )}
+      <UploadStatus state={state} />
+    </div>
+  );
+}
+
+function UploadStatus({ state }: { state: UploadState }) {
+  return (
+    <span aria-live="polite" className="adm-upload-status">
+      {state.kind === "error" ? (
+        <FieldError message={state.message} />
+      ) : state.kind === "uploading" ? (
+        <span className="adm-hint">
+          {state.count > 1
+            ? `Import en cours… (${state.count} restantes)`
+            : "Import en cours…"}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

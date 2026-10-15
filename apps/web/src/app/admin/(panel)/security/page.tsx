@@ -31,6 +31,7 @@ const actionLabels: Record<string, string> = {
   "project.status": "Statut changé",
   "project.reordered": "Ordre modifié",
   "project.deleted": "Projet supprimé",
+  "project.image.uploaded": "Image importée",
 };
 
 export default async function SecurityPage() {

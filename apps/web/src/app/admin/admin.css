@@ -165,6 +165,17 @@
   font-size: 0.9375rem;
 }
 
+.adm-button-sm {
+  min-height: 1.9rem;
+  padding: 0 0.7rem;
+  font-size: 0.8125rem;
+}
+
+.adm-button-sm svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
 .adm-button-block {
   width: 100%;
 }
@@ -987,10 +998,6 @@
   grid-template-columns: 8rem minmax(0, 1fr);
 }
 
-.adm-repeat-fields.is-media {
-  grid-template-columns: 6rem minmax(0, 1fr);
-}
-
 .adm-repeat-tools {
   display: flex;
   gap: 0.1rem;
@@ -1094,6 +1101,82 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Image upload: thumbnail and button beside the fields, drop target. */
+.adm-upload {
+  display: grid;
+  grid-template-columns: 10rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.6rem 1rem;
+  margin: -0.35rem;
+  padding: 0.35rem;
+  border: 1px dashed transparent;
+  border-radius: var(--adm-radius-sm);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.adm-upload.is-compact {
+  grid-template-columns: 6rem minmax(0, 1fr);
+  gap: 0.6rem 0.75rem;
+}
+
+.adm-upload.is-over,
+.adm-gallery.is-over {
+  border-color: var(--adm-accent);
+  background: var(--adm-accent-soft);
+}
+
+.adm-upload-side {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: stretch;
+}
+
+.adm-upload-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.adm-upload-empty {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--adm-ink-3);
+}
+
+.adm-upload-busy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.adm-upload-busy svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.adm-upload-fields {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.adm-upload-status:empty {
+  display: none;
+}
+
+.adm-gallery-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin-top: 0.6rem;
 }
 
 /* Save bar, preview. */
@@ -1627,8 +1710,14 @@
   .adm-fields,
   .adm-repeat-fields.is-row,
   .adm-repeat-fields.is-metric,
-  .adm-repeat-fields.is-media {
+  .adm-upload {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-upload-side {
+    grid-template-columns: 8rem auto;
+    align-items: end;
+    justify-items: start;
   }
 
   .adm-repeat-item:not(.is-inline) {
@@ -1676,7 +1765,13 @@
 }
 
 .adm-gallery {
-  margin-top: 1.5rem;
+  margin: 1.5rem -0.35rem -0.35rem;
+  padding: 0.35rem;
+  border: 1px dashed transparent;
+  border-radius: var(--adm-radius-sm);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
 }
 
 .adm-gallery > .adm-label {

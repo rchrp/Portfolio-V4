@@ -27,3 +27,14 @@ export const outro = {
   email: "",
   signature: "Conçu et développé pixel par pixel.",
 };
+
+// Third-party assets that require attribution (see README).
+export const credits = {
+  model: {
+    title: "Computer Terminal",
+    url: "https://skfb.ly/6vrwA",
+    author: "Chris Sweetwood",
+    license: "CC BY-SA 4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+  },
+};

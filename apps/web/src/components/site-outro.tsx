@@ -4,7 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { useRef, useState } from "react";
 import { PixelMatrix, type FieldRect } from "@/components/pixel-matrix";
 import { edgeMapFor } from "@/lib/edge-maps";
-import { outro } from "@/lib/site-content";
+import { credits, outro } from "@/lib/site-content";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
 
 const portrait = "/portrait_3_white_bg_wider.png";
@@ -83,6 +83,20 @@ export function SiteOutro() {
       <div className="outro-footer">
         <span>© {new Date().getFullYear()} Raphaël Charpentier</span>
         <span>{outro.signature}</span>
+        <span className="outro-credits">
+          Modèle 3D «&nbsp;
+          <a href={credits.model.url} target="_blank" rel="noopener noreferrer">
+            {credits.model.title}
+          </a>
+          &nbsp;» par {credits.model.author},{" "}
+          <a
+            href={credits.model.licenseUrl}
+            target="_blank"
+            rel="noopener noreferrer license"
+          >
+            {credits.model.license}
+          </a>
+        </span>
       </div>
     </footer>
   );

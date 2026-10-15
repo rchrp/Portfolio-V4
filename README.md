@@ -44,7 +44,7 @@ The page reads as one scroll-driven story; its copy lives in `apps/web/src/lib/s
 
 1. **Hero** — portrait and interactive pixel matrix (light, editorial).
 2. **Manifesto** — after a light-to-night gradient, the statement lights up word by word as you scroll.
-3. **Terminal** — a procedural three.js CRT (loaded on demand) powers on, boots, and switches channel for each project as the page scrolls. The screen is a 2D canvas texture (a small retro desktop) rendered through a curved-glass shader: barrel distortion, light radial chromatic aberration, scanlines, aperture grille, glitch on channel change, line-then-open power cycle. A `RectAreaLight` tinted by the displayed image lights the keyboard and desk. Behind the canvas, the pixel matrix redraws the active project from its edge map. Arrow keys, the side rail and previous/next buttons scroll to a given project; each opens an accessible native dialog.
+3. **Terminal** — a three.js scene (loaded on demand) with a vintage computer model powers on, boots, and switches channel for each project as the page scrolls. The screen is a 2D canvas texture (a small retro desktop) rendered through a curved-glass shader: barrel distortion, light radial chromatic aberration, scanlines, aperture grille, glitch on channel change, line-then-open power cycle. The shader is applied to the model's own curved glass. A `RectAreaLight` tinted by the displayed image lights the keyboard and desk. Behind the canvas, the pixel matrix redraws the active project from its edge map. Arrow keys, the side rail and previous/next buttons scroll to a given project; each opens an accessible native dialog.
 4. **Contact** — the monitor switches off and the matrix redraws the portrait from its edge map.
 
 Reduced-motion preferences make power changes and project switches instant and remove glitches, camera drift and blur. Without WebGL, the project image is shown in a CSS monitor frame.
@@ -60,6 +60,14 @@ pnpm --filter web edges https://example.com/cover.jpg
 ```
 
 Projects whose image has no edge map fall back to computing it in the browser (remote images need CORS headers).
+
+### 3D model
+
+The monitor is a third-party model, adapted for the site by `apps/web/scripts/build-model.mjs`: it removes Sketchfab's backdrop planes, splits the screen glass into its own `Screen` primitive (UVs spanning 0–1, for the CRT shader) and re-encodes textures as WebP (3.9 MB → 0.34 MB). The source stays in `apps/web/assets/models/` (not served); rebuild after changing it:
+
+```bash
+pnpm --filter web model
+```
 
 ## Project catalog
 
@@ -91,3 +99,12 @@ Required content: unique `slug`, `title`, `summary`, plain-text `description`, `
 Projects default to `DRAFT`. To publish, set `status = PUBLISHED` **and** `publishedAt` to a current or past timestamp. Future timestamps remain hidden until that time; `ARCHIVED` and draft records never enter the public catalog. Ordering is `sortOrder` ascending, then newest `createdAt`, then `id` for stable ties. All published projects are returned. The public DTO excludes editorial status and internal timestamps.
 
 The future admin panel should validate field lengths, URLs, color, year, and publication state before writing, and enforce authentication/authorization on every mutation. Database constraints provide the final integrity boundary.
+
+## Third-party assets and credits
+
+The source code of this repository is licensed under the [MIT License](LICENSE). The following asset is **not** covered by the MIT License and keeps its own license:
+
+- **3D model** — ["Computer Terminal"](https://skfb.ly/6vrwA) by [Chris Sweetwood](https://sketchfab.com/ChrisSweetwood), licensed under [Creative Commons Attribution-ShareAlike 4.0](http://creativecommons.org/licenses/by-sa/4.0/) (CC BY-SA 4.0).
+  - Files: `apps/web/assets/models/computer_terminal.glb` (original) and `apps/web/public/models/computer-terminal.glb` (adapted).
+  - Changes: backdrop planes removed, screen glass split into a separate primitive with remapped UVs, textures resized and converted to WebP. The adapted model is distributed under the same CC BY-SA 4.0 license.
+  - The site credits the author in its footer.

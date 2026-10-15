@@ -43,7 +43,7 @@ const DURATION = 3150;
 const LOAD_BUDGET = 2200;
 const MAX_DEPTH = SPLIT_SPREAD.length;
 /** Distance over which edges are drawn to the pointer, in CSS pixels. */
-const MAGNET_RADIUS = 420;
+const MAGNET_RADIUS = 520;
 
 const glslFloat = (value: number) => value.toFixed(1);
 
@@ -76,6 +76,8 @@ uniform float uRadius;
 uniform float uStrength;
 uniform vec3 uMatrix;
 uniform vec2 uMatrixArea;
+/** Bottom of the hero (the visible part of the photo), in canvas pixels. */
+uniform float uVisibleBottom;
 out vec4 fragColor;
 
 const float SPLIT_START = ${glslFloat(SPLIT_START)};
@@ -159,12 +161,12 @@ float matrixFade(float y) {
 // rising towards 1 deep inside.
 float silhouetteDepth(vec2 center) {
   return 0.5 * (
-    sampleArea(uPhoto, center, uCell, 2.5).a +
-    sampleArea(uPhoto, center, uCell, 3.5).a
+    sampleArea(uPhoto, center, uCell, 3.0).a +
+    sampleArea(uPhoto, center, uCell, 4.0).a
   );
 }
 
-// The silhouette's edges dissolve into the hero matrix, on the lower half
+// The silhouette's edges dissolve into the hero matrix, on the lower third
 // of the portrait only. The deeper the pointer goes into the silhouette,
 // the further the matrix eats in from the contour — more on the side of the
 // pointer, as if drawn to it — without ever reaching the middle.
@@ -174,9 +176,11 @@ vec4 nibbledEdges(vec2 pixel, vec4 direct) {
   vec2 id = floor((pixel - uOrigin) / uCell + 0.5);
   vec2 center = uOrigin + id * uCell;
 
-  // Fades in from the middle of the image down; the head stays intact.
-  float row = (center.y - uImageRect.y) / uImageRect.w;
-  float lower = smoothstep(0.5, 0.75, row);
+  // Fades in over the lower third of the visible photo; the rest stays
+  // intact.
+  float visibleHeight = min(uImageRect.y + uImageRect.w, uVisibleBottom) - uImageRect.y;
+  float row = (center.y - uImageRect.y) / visibleHeight;
+  float lower = smoothstep(0.65, 0.85, row);
   if (lower <= 0.0) return vec4(0.0);
 
   vec4 photo = sampleArea(uPhoto, center, uCell, 0.0);
@@ -195,7 +199,7 @@ vec4 nibbledEdges(vec2 pixel, vec4 direct) {
   float drift = valueNoise(id * 0.3 + uTime * 0.0004) - 0.5;
   float scatter = hash(id) - 0.5;
   // Capped: the blurred depth saturates near 1 inside, which stays intact.
-  float front = min(0.5 + pull * (0.42 + drift * 0.2 + scatter * 0.14), 0.88);
+  float front = min(0.5 + pull * (0.56 + drift * 0.2 + scatter * 0.14), 0.9);
   float eaten = smoothstep(0.0, 0.14, front - depth);
   // Cells mostly outside the silhouette never show as photo pixels: within
   // the eroded band they go straight to matrix cells.
@@ -463,6 +467,7 @@ export function PortraitReveal({
         strength: uniform("uStrength"),
         matrix: uniform("uMatrix"),
         matrixArea: uniform("uMatrixArea"),
+        visibleBottom: uniform("uVisibleBottom"),
       };
       context.uniform1i(uniform("uPhoto"), 0);
       context.uniform1i(uniform("uEdges"), 1);
@@ -573,6 +578,7 @@ export function PortraitReveal({
         context.uniform1f(uniforms.cell, cell);
         context.uniform1i(uniforms.depth, depth);
         context.uniform2f(uniforms.matrixArea, matrixTop, matrixHeight);
+        context.uniform1f(uniforms.visibleBottom, matrixTop + matrixHeight);
         context.uniform3f(
           uniforms.matrix,
           matrixMin,

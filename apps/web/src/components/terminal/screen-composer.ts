@@ -56,6 +56,23 @@ function loadImage(src: string) {
 }
 
 const easeOut = (value: number) => 1 - Math.pow(1 - value, 3);
+const easeInOut = (value: number) => value * value * (3 - 2 * value);
+const lerp = (from: number, to: number, amount: number) =>
+  from + (to - from) * amount;
+
+const windowFrame = {
+  x: margin,
+  y: menuHeight + 22,
+  width: SCREEN_WIDTH - margin * 2,
+  height: promptY - menuHeight - 66,
+};
+// Maximized, the window's chrome sits just off screen and its content fills it.
+const maximizedFrame = {
+  x: -2,
+  y: -38,
+  width: SCREEN_WIDTH + 4,
+  height: SCREEN_HEIGHT + 40,
+};
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
 export class ScreenComposer {
@@ -69,6 +86,8 @@ export class ScreenComposer {
   private mode: Mode = { kind: "off" };
   private image: HTMLImageElement | null = null;
   private lastCursor = -1;
+  private focus = 0;
+  private drawnFocus = 0;
 
   constructor(fonts: { mono: string; sans: string }) {
     this.canvas = document.createElement("canvas");
@@ -118,6 +137,11 @@ export class ScreenComposer {
     this.measureLight(null, project.accentColor);
   }
 
+  /** 0 → windowed project, 1 → its window maximized, picture alone. */
+  setFocus(amount: number) {
+    this.focus = amount;
+  }
+
   /** Redraws the screen; returns false when nothing changed since last call. */
   draw(now: number): boolean {
     const cursor = Math.floor(now / 530) % 2;
@@ -133,11 +157,13 @@ export class ScreenComposer {
     const elapsed = now - mode.startedAt;
     const animating =
       elapsed < zoomDuration + loadDuration + typeDuration ||
-      (this.image === null && mode.project.imageUrl !== null);
+      (this.image === null && mode.project.imageUrl !== null) ||
+      this.focus !== this.drawnFocus;
 
     if (!animating && cursor === this.lastCursor) return false;
 
     this.lastCursor = cursor;
+    this.drawnFocus = this.focus;
     this.drawProject(mode.project, elapsed, cursor === 0);
     return true;
   }
@@ -273,11 +299,15 @@ export class ScreenComposer {
     context.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     this.drawMenuBar(counter);
 
+    // Maximizing skips what is left of the opening animations.
+    if (this.focus > 0)
+      elapsed = Math.max(elapsed, zoomDuration + loadDuration + typeDuration);
+    const maximized = easeInOut(this.focus);
     const frame = {
-      x: margin,
-      y: menuHeight + 22,
-      width: SCREEN_WIDTH - margin * 2,
-      height: promptY - menuHeight - 66,
+      x: lerp(windowFrame.x, maximizedFrame.x, maximized),
+      y: lerp(windowFrame.y, maximizedFrame.y, maximized),
+      width: lerp(windowFrame.width, maximizedFrame.width, maximized),
+      height: lerp(windowFrame.height, maximizedFrame.height, maximized),
     };
     const zoom = easeOut(clamp01(elapsed / zoomDuration));
 
@@ -395,7 +425,10 @@ export class ScreenComposer {
     }
 
     const typed = clamp01((elapsed - zoomDuration - 120) / typeDuration);
+    if (maximized >= 1) return;
+    context.globalAlpha = 1 - maximized;
     this.drawPrompt(project, typed, cursorOn);
+    context.globalAlpha = 1;
   }
 
   private drawPrompt(project: ScreenProject, typed: number, cursorOn: boolean) {

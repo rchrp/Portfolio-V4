@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   type CSSProperties,
+  type RefObject,
   type SyntheticEvent,
 } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
@@ -68,7 +69,6 @@ export function ProjectShowcase({
   onPrevious: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const storyRef = useRef<HTMLElement>(null);
   const words = useMemo(
     () => splitWords(project.description),
     [project.description],
@@ -86,19 +86,6 @@ export function ProjectShowcase({
   useEffect(() => {
     dialogRef.current?.scrollTo({ top: 0 });
   }, [project.id]);
-
-  // The description lights up word by word while its chapter is pinned.
-  useScrollProgress(
-    storyRef,
-    ({ progress }) => {
-      storyRef.current?.style.setProperty(
-        "--words",
-        clamp01((progress - 0.04) / 0.72).toFixed(4),
-      );
-    },
-    0,
-    dialogRef,
-  );
 
   const period = projectPeriod(project);
   const facts = [
@@ -224,33 +211,12 @@ export function ProjectShowcase({
         </header>
 
         {words.length > 0 && (
-          <section
-            ref={storyRef}
-            className="showcase-story"
-            aria-labelledby="showcase-story-heading"
-            data-length={words.length > 60 ? "long" : undefined}
-            style={{ "--n": words.length } as CSSProperties}
-          >
-            <div className="showcase-story-sticky">
-              <h3 id="showcase-story-heading" className="showcase-label">
-                <span>{chapter("story")}</span> Le projet
-              </h3>
-              <p className="showcase-story-text">
-                <span className="sr-only">{project.description}</span>
-                <span aria-hidden="true">
-                  {words.map(({ word, index: wordIndex }) => (
-                    <span
-                      key={wordIndex}
-                      className="showcase-word"
-                      style={{ "--i": wordIndex } as CSSProperties}
-                    >
-                      {word}{" "}
-                    </span>
-                  ))}
-                </span>
-              </p>
-            </div>
-          </section>
+          <ShowcaseStory
+            description={project.description}
+            words={words}
+            chapter={chapter("story")}
+            scrollerRef={dialogRef}
+          />
         )}
 
         {project.metrics.length > 0 && (
@@ -437,5 +403,63 @@ function ProjectLinks({
         </a>
       ))}
     </div>
+  );
+}
+
+// Mounted with each project, so its scroll listener follows the new section.
+function ShowcaseStory({
+  description,
+  words,
+  chapter,
+  scrollerRef,
+}: {
+  description: string;
+  words: ReturnType<typeof splitWords>;
+  chapter: string;
+  scrollerRef: RefObject<HTMLElement | null>;
+}) {
+  const storyRef = useRef<HTMLElement>(null);
+
+  // The description lights up word by word while its chapter is pinned.
+  useScrollProgress(
+    storyRef,
+    ({ progress }) => {
+      storyRef.current?.style.setProperty(
+        "--words",
+        clamp01((progress - 0.04) / 0.72).toFixed(4),
+      );
+    },
+    0,
+    scrollerRef,
+  );
+
+  return (
+    <section
+      ref={storyRef}
+      className="showcase-story"
+      aria-labelledby="showcase-story-heading"
+      data-length={words.length > 60 ? "long" : undefined}
+      style={{ "--n": words.length } as CSSProperties}
+    >
+      <div className="showcase-story-sticky">
+        <h3 id="showcase-story-heading" className="showcase-label">
+          <span>{chapter}</span> Le projet
+        </h3>
+        <p className="showcase-story-text">
+          <span className="sr-only">{description}</span>
+          <span aria-hidden="true">
+            {words.map(({ word, index }) => (
+              <span
+                key={index}
+                className="showcase-word"
+                style={{ "--i": index } as CSSProperties}
+              >
+                {word}{" "}
+              </span>
+            ))}
+          </span>
+        </p>
+      </div>
+    </section>
   );
 }

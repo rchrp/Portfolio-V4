@@ -351,21 +351,38 @@ export function PixelMatrix({
       retargetField(false);
     };
 
+    // Cells are batched by opacity: one path and one fill per level instead
+    // of one per cell, which keeps dense matrices cheap to redraw.
+    const alphaLevels = 24;
+    let batches: (Path2D | null)[] = [];
+
     const drawCell = (cell: PixelCell, scale: number, alpha: number) => {
+      const level = Math.round(clamp(alpha, 0, 1) * alphaLevels);
+      if (level === 0) return;
       const size = spacing * scale;
       const halfSize = size / 2;
-      const cornerRadius = Math.min(2, size * 0.16);
+      const path = (batches[level] ??= new Path2D());
 
-      context.globalAlpha = alpha;
-      context.beginPath();
-      context.roundRect(
-        cell.x - halfSize,
-        cell.y - halfSize,
-        size,
-        size,
-        cornerRadius,
-      );
-      context.fill();
+      if (size < 6) {
+        path.rect(cell.x - halfSize, cell.y - halfSize, size, size);
+      } else {
+        path.roundRect(
+          cell.x - halfSize,
+          cell.y - halfSize,
+          size,
+          size,
+          Math.min(2, size * 0.16),
+        );
+      }
+    };
+
+    const flushCells = () => {
+      batches.forEach((path, level) => {
+        if (!path) return;
+        context.globalAlpha = level / alphaLevels;
+        context.fill(path);
+      });
+      batches = [];
     };
 
     const draw = (timestamp = performance.now()) => {
@@ -432,6 +449,8 @@ export function PixelMatrix({
 
         drawCell(cell, introScale, introAlpha);
       }
+
+      flushCells();
 
       if (!introComplete && introElapsed >= introDuration) {
         introComplete = true;

@@ -38,13 +38,33 @@ pnpm format
 pnpm format:check
 ```
 
-## Project gallery
+## Story and animation
 
-The section immediately after the hero reads published projects from PostgreSQL on the server. `GET /api/projects` exposes the same public catalog with a `source` field (`database` or `demo`), without caching database failures. There are no public write endpoints or administrator panel yet.
+The page reads as one scroll-driven story; its copy lives in `apps/web/src/lib/site-content.ts`.
 
-- The gallery uses semantic HTML cards and CSS perspective/transforms, without Three.js, WebGL, or a continuous JavaScript rendering loop. Image, metadata and progressive backdrop blur move together. Pointer-driven tilt and a subtle light reflection enhance hover. Horizontal dragging, horizontal trackpad gestures, previous/next buttons, direct selection, and keyboard arrows/Home/End navigate the complete catalog. Vertical page scrolling stays native.
-- Each project opens an accessible native dialog. Escape closes it and focus returns to its trigger. Site/source links appear only when configured.
-- A continuous light-to-charcoal gradient joins the hero and the dark project section. CSS scroll timelines progressively fade the hero and reveal the gallery where supported; other browsers retain the complete static composition. Reduced-motion preferences disable scroll animations, tilt and sliding. Inactive cards are inert and hidden from assistive technology; failed images use local fallback artwork.
+1. **Hero** — portrait and interactive pixel matrix (light, editorial).
+2. **Manifesto** — after a light-to-night gradient, the statement lights up word by word as you scroll.
+3. **Terminal** — a procedural three.js CRT (loaded on demand) powers on, boots, and switches channel for each project as the page scrolls. The screen is a 2D canvas texture (a small retro desktop) rendered through a curved-glass shader: barrel distortion, light radial chromatic aberration, scanlines, aperture grille, glitch on channel change, line-then-open power cycle. A `RectAreaLight` tinted by the displayed image lights the keyboard and desk. Behind the canvas, the pixel matrix redraws the active project from its edge map. Arrow keys, the side rail and previous/next buttons scroll to a given project; each opens an accessible native dialog.
+4. **Contact** — the monitor switches off and the matrix redraws the portrait from its edge map.
+
+Reduced-motion preferences make power changes and project switches instant and remove glitches, camera drift and blur. Without WebGL, the project image is shown in a CSS monitor frame.
+
+### Pixel-matrix edge maps
+
+The matrix draws images from precomputed edge maps: gradient magnitude of a derivative-of-Gaussian filter (separable kernels, percentile normalization), stored as small grayscale PNGs in `apps/web/public/matrix/` and indexed in `apps/web/src/lib/edge-maps.json` by image URL. Generate them once, after adding or changing an image:
+
+```bash
+pnpm --filter web edges                         # public/projects/* and the portrait
+pnpm --filter web edges public/projects/new.png # specific files under public/
+pnpm --filter web edges https://example.com/cover.jpg
+```
+
+Projects whose image has no edge map fall back to computing it in the browser (remote images need CORS headers).
+
+## Project catalog
+
+The terminal chapter reads published projects from PostgreSQL on the server. `GET /api/projects` exposes the same public catalog with a `source` field (`database` or `demo`), without caching database failures. There are no public write endpoints or administrator panel yet.
+
 - Missing or unreachable database: four **clearly labeled fictional examples**, using locally stored SVG artwork, are displayed. They are never inserted into PostgreSQL. A failed database read is reported server-side without logging credentials.
 - Connected but empty database (or only drafts): an intentional empty state is shown, **not** fabricated projects.
 

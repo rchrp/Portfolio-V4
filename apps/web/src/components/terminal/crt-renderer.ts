@@ -49,7 +49,7 @@ const screenFragment = /* glsl */ `
   void main() {
     vec2 centered = vUv * 2.0 - 1.0;
     // Fit the picture inside the bezel, then bulge it like curved glass.
-    vec2 curved = centered * 1.06;
+    vec2 curved = centered * 1.02;
     curved *= 1.0 + 0.055 * dot(curved, curved);
     vec2 uv = curved * 0.5 + 0.5;
 
@@ -177,7 +177,7 @@ export class CrtRenderer {
     THREE.MeshBasicMaterial
   >;
   private readonly led: THREE.MeshStandardMaterial;
-  private readonly lookTarget = new THREE.Vector3(0, 0.82, 0);
+  private readonly lookTarget = new THREE.Vector3(0, 0.62, 0.2);
   private readonly cameraPosition = new THREE.Vector3(-0.9, 2.6, 8.5);
   private readonly cameraTarget = new THREE.Vector3();
   private readonly lightColor = new THREE.Color(1, 1, 1);
@@ -213,7 +213,7 @@ export class CrtRenderer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     RectAreaLightUniformsLib.init();
 
     const environment = new THREE.PMREMGenerator(this.renderer);
@@ -552,8 +552,8 @@ export class CrtRenderer {
 
   private applyViewOffset() {
     // Shift the projection, not the scene, to leave room for the text column.
-    const shiftX = this.layout === "side" ? -this.width * 0.17 : 0;
-    const shiftY = this.layout === "stacked" ? this.height * 0.2 : 0;
+    const shiftX = this.layout === "side" ? -this.width * 0.13 : 0;
+    const shiftY = this.layout === "stacked" ? this.height * 0.15 : 0;
     this.camera.setViewOffset(
       this.width,
       this.height,
@@ -592,12 +592,17 @@ export class CrtRenderer {
     const approach = ease(intro);
     const leave = ease(outro);
     const sway = Math.sin(project * 1.15) * 0.32;
-    const distance = this.layout === "stacked" ? 5.9 : 4.1;
+    // On narrow screens, back off until the monitor fits the width.
+    const halfWidth =
+      Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) *
+      this.camera.aspect;
+    const distance =
+      this.layout === "stacked" ? Math.max(6.6, 1.12 / halfWidth) : 5.65;
     this.cameraTarget.set(
       THREE.MathUtils.lerp(-1.4, sway, approach) + leave * 0.6,
       THREE.MathUtils.lerp(
         2.9,
-        1.18 + Math.cos(project * 0.9) * 0.08,
+        1.55 + Math.cos(project * 0.9) * 0.08,
         approach,
       ) +
         leave * 1.1,

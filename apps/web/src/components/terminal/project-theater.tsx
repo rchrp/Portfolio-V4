@@ -23,7 +23,7 @@ const INTRO = 1.1;
 const OUTRO = 0.9;
 
 const brandRgb = [241, 90, 36];
-const sideField: FieldRect = { x: 0.3, y: 0.02, width: 0.7, height: 0.96 };
+const sideField: FieldRect = { x: 0.34, y: 0.06, width: 0.64, height: 0.88 };
 const stackedField: FieldRect = { x: 0, y: 0, width: 1, height: 0.62 };
 
 const clamp = (value: number, minimum: number, maximum: number) =>
@@ -33,8 +33,8 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 function matrixColor(accent: string) {
   const channels = [1, 3, 5].map((offset, index) =>
     Math.round(
-      brandRgb[index] * 0.62 +
-        parseInt(accent.slice(offset, offset + 2), 16) * 0.38,
+      brandRgb[index] * 0.75 +
+        parseInt(accent.slice(offset, offset + 2), 16) * 0.25,
     ),
   );
   return `#${channels.map((value) => value.toString(16).padStart(2, "0")).join("")}`;

@@ -20,7 +20,7 @@ export const projectsChapter = {
 
 export const outro = {
   chapter: "03 / Contact",
-  title: ["Un projet en tête ?", "Allumons-le."],
+  title: ["Un projet en tête\u00a0?", "Allumons-le."],
   lead: "Disponible pour des missions freelance : produits web, interfaces sur mesure et expériences interactives.",
   // Public contact address shown on the site; the call to action stays hidden
   // until it is set.

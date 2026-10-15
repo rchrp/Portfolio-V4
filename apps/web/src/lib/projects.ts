@@ -37,13 +37,15 @@ export type Project = {
   technologies: string[];
   imageUrl: string | null;
   imageAlt: string | null;
+  /** Drawn by the pixel matrix instead of the cover, when there is one. */
+  logoUrl: string | null;
   accentColor: string;
   notice: string | null;
   featured: boolean;
   links: ProjectLink[];
   media: ProjectMedia[];
   metrics: ProjectMetric[];
-  /** Precomputed edge map drawn by the pixel matrix, when one exists. */
+  /** Precomputed edge map drawn by the pixel matrix (from the logo, else the cover). */
   edgeMapUrl?: string | null;
 };
 

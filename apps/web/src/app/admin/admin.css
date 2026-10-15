@@ -1141,6 +1141,34 @@
   place-items: center;
 }
 
+.adm-upload-thumb.is-logo {
+  background:
+    repeating-conic-gradient(rgba(17, 17, 14, 0.07) 0 25%, transparent 0 50%) 0
+      0 / 12px 12px,
+    var(--adm-surface);
+}
+
+.adm-upload-thumb.is-logo img {
+  padding: 0.6rem;
+  object-fit: contain;
+}
+
+.adm-upload-field {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.adm-upload-field .adm-media-thumb {
+  width: 6rem;
+  background: #000;
+}
+
+.adm-upload-field img {
+  object-fit: contain;
+}
+
 .adm-upload-empty {
   width: 1.25rem;
   height: 1.25rem;

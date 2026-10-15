@@ -12,13 +12,13 @@ export type UploadResult =
 
 const uploadSchema = z.object({
   slug: z.string().max(100).regex(SLUG_PATTERN),
-  purpose: z.enum(["cover", "media"]),
+  purpose: z.enum(["cover", "media", "logo"]),
   file: z.instanceof(File),
 });
 
 /**
- * Takes one image for a project's cover or gallery and returns its URL, for
- * the form to save. Covers also get their pixel-matrix edge map.
+ * Takes one image for a project's cover, gallery or logo and returns its URL,
+ * for the form to save. Logos and covers also get their pixel-matrix edge map.
  */
 export async function uploadProjectImageAction(
   formData: FormData,
@@ -44,7 +44,7 @@ export async function uploadProjectImageAction(
   try {
     const image = await processImage(
       Buffer.from(await file.arrayBuffer()),
-      purpose === "cover",
+      purpose,
     );
     const url = await storeImage(slug, image);
     await audit("project.image.uploaded", url);

@@ -40,6 +40,7 @@ async function writeProject(project: SeedProject, sortOrder: number) {
     ...fields,
     client: fields.client ?? null,
     notice: fields.notice ?? null,
+    logoUrl: fields.logoUrl ?? null,
     featured: fields.featured ?? false,
     startedOn: toDate(startedOn),
     endedOn: endedOn ? toDate(endedOn) : null,

@@ -85,6 +85,7 @@ export async function getProjectForm(
       technologies: project.technologies,
       imageUrl: project.imageUrl ?? "",
       imageAlt: project.imageAlt ?? "",
+      logoUrl: project.logoUrl ?? "",
       accentColor: project.accentColor,
       notice: project.notice ?? "",
       featured: project.featured,

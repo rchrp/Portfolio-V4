@@ -117,6 +117,7 @@ export const projectFormSchema = z
     technologies: z.array(required(40, "La technologie")).max(30),
     imageUrl: optionalImageUrl,
     imageAlt: optional(240),
+    logoUrl: optionalImageUrl,
     accentColor: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, "Une couleur hexadécimale, ex. #f15a24.")
@@ -210,6 +211,7 @@ export const emptyProject: ProjectFormValues = {
   technologies: [],
   imageUrl: "",
   imageAlt: "",
+  logoUrl: "",
   accentColor: "#f15a24",
   notice: "",
   featured: false,

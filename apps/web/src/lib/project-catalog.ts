@@ -13,7 +13,7 @@ import {
 
 const withEdgeMap = (project: Project): Project => ({
   ...project,
-  edgeMapUrl: edgeMapFor(project.imageUrl),
+  edgeMapUrl: edgeMapFor(project.logoUrl ?? project.imageUrl),
 });
 
 const demoCatalog = (): ProjectCatalog => ({
@@ -47,6 +47,7 @@ export const getProjectCatalog = cache(async (): Promise<ProjectCatalog> => {
         technologies: true,
         imageUrl: true,
         imageAlt: true,
+        logoUrl: true,
         accentColor: true,
         notice: true,
         featured: true,
@@ -72,6 +73,7 @@ export const getProjectCatalog = cache(async (): Promise<ProjectCatalog> => {
             startYear: startedOn.getUTCFullYear(),
             endYear: endedOn?.getUTCFullYear() ?? null,
             imageUrl: publicUrl(project.imageUrl, true),
+            logoUrl: publicUrl(project.logoUrl, true),
             accentColor: /^#[0-9a-f]{6}$/i.test(project.accentColor)
               ? project.accentColor
               : "#f15a24",

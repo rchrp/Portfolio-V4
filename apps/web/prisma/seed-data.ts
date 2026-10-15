@@ -21,6 +21,8 @@ export type SeedProject = {
   technologies: string[];
   imageUrl: string;
   imageAlt: string;
+  /** Uploaded from the admin panel, or `/projects/<slug>/…`. */
+  logoUrl?: string;
   accentColor: string;
   notice?: string;
   featured?: boolean;
@@ -67,6 +69,7 @@ export const seedProjects: SeedProject[] = [
     imageUrl: "/projects/blame/cover.webp",
     imageAlt:
       "Blame, « The ADE that sets the standard » : l’application desktop et son backlog sur un dégradé bleu nuit.",
+    logoUrl: "/projects/blame/c88a50e03f827967abc9fe98.webp",
     accentColor: "#5b4bff",
     featured: true,
     status: "PUBLISHED",
@@ -149,6 +152,7 @@ export const seedProjects: SeedProject[] = [
     imageUrl: "/projects/amazon-analyzer/opportunity-tracker.webp",
     imageAlt:
       "L’Opportunity Tracker d’Amazon Analyzer : des produits de référence avec leurs prix, ventes et analyses.",
+    logoUrl: "/projects/amazon-analyzer/eb44a2b9e100903c3260530f.webp",
     accentColor: "#f2b705",
     status: "PUBLISHED",
     media: [
@@ -190,6 +194,7 @@ export const seedProjects: SeedProject[] = [
     imageUrl: "/projects/finvio/home.webp",
     imageAlt:
       "La page d’accueil de Finvio : « Passe de spectateur à acteur de tes finances ».",
+    logoUrl: "/projects/finvio/6017bd5616cce9b745964a5b.webp",
     accentColor: "#2f6bff",
     status: "PUBLISHED",
     media: [
@@ -232,6 +237,7 @@ export const seedProjects: SeedProject[] = [
     imageUrl: "/projects/finalyzing/home.webp",
     imageAlt:
       "La page d’accueil de Finalyzing, « Stay one step ahead », avec ses écrans desktop et mobile.",
+    logoUrl: "/projects/finalyzing/b234c52957d6f4135b01cf1b.webp",
     accentColor: "#7c5cff",
     notice:
       "La plateforme n’est plus accessible en ligne : les captures montrent sa dernière version publiée.",
@@ -360,6 +366,7 @@ export const seedProjects: SeedProject[] = [
     imageUrl: "/projects/gt3-event/gt3-grand-prix.webp",
     imageAlt:
       "L’affiche du GT3 Grand Prix : trois voitures de course GT3 sous des néons rouges et bleus.",
+    logoUrl: "/projects/gt3-event/a88cc659605f0adc4fb17681.webp",
     accentColor: "#e5383b",
     status: "PUBLISHED",
     links: [

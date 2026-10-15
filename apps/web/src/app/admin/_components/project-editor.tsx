@@ -23,7 +23,9 @@ import {
   type ReactNode,
 } from "react";
 import { projectPeriod, publicUrl } from "@/lib/projects";
+import { edgeMapFor } from "@/lib/edge-maps";
 import {
+  LOGO_UPLOAD_TYPES,
   MAX_UPLOAD_BYTES,
   SLUG_PATTERN,
   UPLOAD_TYPES,
@@ -461,6 +463,30 @@ export function ProjectEditor({
                   value={values.imageAlt ?? ""}
                   onChange={(event) => set("imageAlt", event.target.value)}
                 />
+              )}
+            </Field>
+            <Field
+              label="Logo"
+              wide
+              error={error("logoUrl")}
+              hint="Facultatif. Dessiné par la matrice de pixels à la place de la couverture : un logo simple, de préférence sur fond transparent."
+            >
+              {(props) => (
+                <ImageDrop
+                  url={values.logoUrl}
+                  slug={values.slug}
+                  purpose="logo"
+                  onUploaded={(url) => set("logoUrl", url)}
+                >
+                  <input
+                    {...props}
+                    className="adm-input is-mono"
+                    value={values.logoUrl ?? ""}
+                    onChange={(event) => set("logoUrl", event.target.value)}
+                    placeholder="/projects/…"
+                    spellCheck={false}
+                  />
+                </ImageDrop>
               )}
             </Field>
           </div>
@@ -1107,13 +1133,18 @@ function TagInput({
 
 // ─── Image upload ────────────────────────────────────────────────────────────
 
+type Purpose = "cover" | "media" | "logo";
+
+const uploadTypes = (purpose: Purpose) =>
+  purpose === "logo" ? LOGO_UPLOAD_TYPES : UPLOAD_TYPES;
+
 type UploadState =
   | { kind: "idle" }
   | { kind: "uploading"; count: number }
   | { kind: "error"; message: string };
 
 /** Checks one file, sends it, and returns its URL (or null, with the reason). */
-function useImageUpload(slug: string, purpose: "cover" | "media") {
+function useImageUpload(slug: string, purpose: Purpose) {
   const [state, setState] = useState<UploadState>({ kind: "idle" });
 
   const upload = useCallback(
@@ -1128,8 +1159,10 @@ function useImageUpload(slug: string, purpose: "cover" | "media") {
       for (const [index, file] of files.entries()) {
         // The server sniffs the real type; some systems send none at all.
         const problem =
-          file.type && !UPLOAD_TYPES.includes(file.type)
-            ? "Formats acceptés : PNG, JPEG, WebP."
+          file.type && !uploadTypes(purpose).includes(file.type)
+            ? purpose === "logo"
+              ? "Formats acceptés : PNG, JPEG, WebP, SVG."
+              : "Formats acceptés : PNG, JPEG, WebP."
             : file.size > MAX_UPLOAD_BYTES
               ? "8 Mo au maximum par image."
               : null;
@@ -1206,7 +1239,7 @@ function ImageDrop({
 }: {
   url: string | null | undefined;
   slug: string;
-  purpose: "cover" | "media";
+  purpose: Purpose;
   compact?: boolean;
   onUploaded: (url: string) => void;
   children: ReactNode;
@@ -1218,6 +1251,8 @@ function ImageDrop({
     if (files.length && !busy) void upload(files.slice(0, 1), onUploaded);
   };
   const { over, handlers } = useFileDrop(take, !busy);
+  const logo = purpose === "logo";
+  const field = logo ? edgeMapFor(publicUrl(url ?? null, true)) : null;
 
   return (
     <div
@@ -1225,7 +1260,9 @@ function ImageDrop({
       {...handlers}
     >
       <div className="adm-upload-side">
-        <div className="adm-media-thumb adm-upload-thumb">
+        <div
+          className={`adm-media-thumb adm-upload-thumb${logo ? " is-logo" : ""}`}
+        >
           {url ? (
             <Thumbnail url={url} />
           ) : (
@@ -1249,7 +1286,7 @@ function ImageDrop({
         <input
           ref={picker}
           type="file"
-          accept={UPLOAD_TYPES.join(",")}
+          accept={uploadTypes(purpose).join(",")}
           hidden
           tabIndex={-1}
           onChange={(event) => {
@@ -1262,9 +1299,20 @@ function ImageDrop({
         {children}
         {!compact && (
           <span className="adm-hint">
-            Glissez une image ici · PNG, JPEG ou WebP, 8 Mo max · convertie en
-            WebP, métadonnées retirées.
+            {logo
+              ? "Glissez un logo ici · PNG, JPEG, WebP ou SVG, 8 Mo max · converti en WebP."
+              : "Glissez une image ici · PNG, JPEG ou WebP, 8 Mo max · convertie en WebP, métadonnées retirées."}
           </span>
+        )}
+        {field && (
+          <figure className="adm-upload-field">
+            <div className="adm-media-thumb">
+              <Thumbnail url={field} />
+            </div>
+            <figcaption className="adm-hint">
+              Tracé dessiné par la matrice
+            </figcaption>
+          </figure>
         )}
         <UploadStatus state={state} />
       </div>

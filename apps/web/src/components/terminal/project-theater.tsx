@@ -477,9 +477,12 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
             edgeFade={90}
             intro={false}
             field={powered ? project.edgeMapUrl : null}
-            fieldSource={powered ? project.imageUrl : null}
+            fieldSource={powered ? (project.logoUrl ?? project.imageUrl) : null}
             fieldRect={layout === "side" ? sideField : stackedField}
-            fieldFit={layout === "side" ? "contain" : "cover"}
+            // A logo is never cropped; a cover fills the stacked layout.
+            fieldFit={
+              layout === "side" || project.logoUrl ? "contain" : "cover"
+            }
           />
         </div>
 

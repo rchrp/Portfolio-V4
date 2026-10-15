@@ -49,6 +49,8 @@ model Project {
   technologies String[]        @default([])
   imageUrl     String?         @db.VarChar(2048)
   imageAlt     String?         @db.VarChar(240)
+  /// The project's logo, drawn by the pixel matrix. Decorative, so no alt.
+  logoUrl      String?         @db.VarChar(2048)
   accentColor  String          @default("#f15a24") @db.VarChar(7)
   /// A caveat visitors should read first, e.g. a platform taken offline.
   notice       String?         @db.VarChar(400)

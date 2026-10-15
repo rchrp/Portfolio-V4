@@ -66,7 +66,7 @@ pnpm --filter web edges public/projects/new.png # specific files under public/
 pnpm --filter web edges https://example.com/cover.jpg
 ```
 
-Covers uploaded from the [admin panel](#images) get their edge map at upload time, stored next to the image (`<name>.edges.png`) and found by that naming convention, so they need no script run. Projects whose image has no edge map fall back to computing it in the browser (remote images need CORS headers). The portrait also gets a light color texture (`*-color.webp`, 960 px) used by the hero intro.
+In the projects chapter, the matrix draws the project's **logo** when it has one (always fitted whole, never cropped), and its cover otherwise. Logos and covers uploaded from the [admin panel](#images) get their edge map at upload time, stored next to the image (`<name>.edges.png`) and found by that naming convention, so they need no script run. Projects whose image has no edge map fall back to computing it in the browser (remote images need CORS headers). The portrait also gets a light color texture (`*-color.webp`, 960 px) used by the hero intro.
 
 ### 3D model
 
@@ -107,6 +107,7 @@ Day-to-day edits go through the [admin panel](#admin-panel). `pnpm db:studio` st
 | `highlights`                              | Key points, one short sentence each.                                                      |
 | `technologies`                            | Shown as compact tags.                                                                    |
 | `imageUrl`, `imageAlt`                    | Cover, shown on the monitor and in the showcase hero. Landscape, about 16:9.              |
+| `logoUrl`                                 | Optional logo, drawn by the pixel matrix instead of the cover. Best on transparency.      |
 | `accentColor`                             | Six-digit hex color.                                                                      |
 | `notice`                                  | Optional caveat shown above the links, e.g. a platform taken offline.                     |
 | `featured`                                | Marks the project to highlight first.                                                     |
@@ -144,15 +145,15 @@ Lost every passkey? Run `pnpm admin:invite` again: shell access to the server is
 
 ### Images
 
-In **Visuels**, the cover and each screenshot have an **Importer** button, and accept an image dropped on them; **Importer des captures** (or a drop on the gallery) adds several screenshots at once. The field is filled in, the thumbnail and the live preview follow, and the project still has to be saved. A path under `apps/web/public/` or an HTTPS URL can still be typed instead.
+In **Visuels**, the cover, the logo and each screenshot have an **Importer** button, and accept an image dropped on them; **Importer des captures** (or a drop on the gallery) adds several screenshots at once. The field is filled in, the thumbnail and the live preview follow, and the project still has to be saved. A path under `apps/web/public/` or an HTTPS URL can still be typed instead.
 
 The upload is a Server Action (`src/app/admin/_actions/uploads.ts`, then `src/lib/admin/uploads.ts`):
 
 1. `requireAdmin()` runs first; Next.js rejects calls from another origin.
-2. PNG, JPEG or WebP only, recognized by their magic bytes and confirmed by the decoder (an SVG, a GIF or a renamed file is refused); 8 MB and 50 megapixels at most. `next.config.ts` raises the Server Action body limit to 9 MB for this, for every Server Action.
-3. sharp applies the EXIF orientation, fits the image within 2400 px and re-encodes it to WebP, which drops EXIF (GPS included), ICC and XMP metadata.
+2. PNG, JPEG or WebP only, recognized by their magic bytes and confirmed by the decoder (a GIF or a renamed file is refused); logos may also be SVG, without DTD entities, rasterized on the server so the SVG itself is never stored or served. 8 MB and 50 megapixels at most. `next.config.ts` raises the Server Action body limit to 9 MB for this, for every Server Action.
+3. sharp applies the EXIF orientation, fits the image within 2400 px (1024 px for a logo) and re-encodes it to WebP, which drops EXIF (GPS included), ICC and XMP metadata.
 4. The file is stored as `projects/<slug>/<24 random hex>.webp`: the slug must match `^[a-z0-9]+(-[a-z0-9]+)*$`, and nothing else from the client reaches the path. Uploading needs a valid slug; an image keeps its folder if the slug changes later.
-5. A cover also gets its pixel-matrix edge map, `<same name>.edges.png`, used by the site without running `pnpm --filter web edges`. Images that are neither uploaded nor listed by that script still fall back to the browser.
+5. A logo or a cover also gets its pixel-matrix edge map, `<same name>.edges.png`, used by the site without running `pnpm --filter web edges`; the admin shows the logo's next to it. A logo is trimmed and given a margin, and a transparent one is laid on the background that contrasts with its ink, so a white logo still has an outline. Images that are neither uploaded nor listed by that script still fall back to the browser.
 
 Uploads are logged in the audit trail. Replaced or removed images are not deleted.
 
@@ -172,7 +173,7 @@ S3_SECRET_ACCESS_KEY="…"
 S3_PUBLIC_URL="https://images.example.com"                # public base URL of the bucket
 ```
 
-Objects are written with a one-year immutable `Cache-Control` and saved in the project as `https://` URLs, which the admin CSP already allows (`img-src https:`). For the pixel matrix to read a cover's edge map from another origin, the bucket must send CORS headers allowing `GET` from the site's origin.
+Objects are written with a one-year immutable `Cache-Control` and saved in the project as `https://` URLs, which the admin CSP already allows (`img-src https:`). For the pixel matrix to read an edge map from another origin, the bucket must send CORS headers allowing `GET` from the site's origin.
 
 ## Third-party assets and credits
 

@@ -20,6 +20,7 @@ export const demoProjects: Project[] = [
     imageUrl: "/projects/atlas.svg",
     imageAlt:
       "Concept Atlas : plateforme de séjours nature, dans des tons olive et crème.",
+    logoUrl: null,
     accentColor: "#65704b",
     notice: null,
     featured: false,
@@ -45,6 +46,7 @@ export const demoProjects: Project[] = [
     imageUrl: "/projects/forme.svg",
     imageAlt:
       "Concept Forme : portfolio d’architecture bleu cobalt et composition géométrique.",
+    logoUrl: null,
     accentColor: "#344ec5",
     notice: null,
     featured: false,
@@ -70,6 +72,7 @@ export const demoProjects: Project[] = [
     imageUrl: "/projects/circuit.svg",
     imageAlt:
       "Concept Circuit : application de gestion de projets sombre, avec un tableau de tâches.",
+    logoUrl: null,
     accentColor: "#dc713f",
     notice: null,
     featured: false,
@@ -95,6 +98,7 @@ export const demoProjects: Project[] = [
     imageUrl: "/projects/argile.svg",
     imageAlt:
       "Concept Argile : boutique de céramiques aux teintes terracotta et sable.",
+    logoUrl: null,
     accentColor: "#ad624d",
     notice: null,
     featured: false,

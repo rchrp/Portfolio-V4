@@ -13,6 +13,8 @@ export type Project = {
   accentColor: string;
   liveUrl: string | null;
   sourceUrl: string | null;
+  /** Precomputed edge map drawn by the pixel matrix, when one exists. */
+  edgeMapUrl?: string | null;
 };
 
 export type ProjectCatalog = {

@@ -9,7 +9,7 @@ import {
   type SyntheticEvent,
 } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
-import type { Project } from "@/lib/projects";
+import { projectKindLabels, projectPeriod, type Project } from "@/lib/projects";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
 
 export const placeholderArtwork = "/projects/placeholder.svg";
@@ -98,11 +98,29 @@ export function ProjectShowcase({
     dialogRef,
   );
 
+  const period = projectPeriod(project);
   const facts = [
-    { label: "Intervention", value: project.role },
-    { label: "Catégorie", value: project.category },
-    { label: "Année", value: String(project.year) },
+    { label: "Contexte", value: projectKindLabels[project.kind] },
+    { label: "Type", value: project.category },
+    { label: "Rôle", value: project.role },
+    ...(project.client ? [{ label: "Client", value: project.client }] : []),
+    { label: "Période", value: period },
   ];
+
+  // Chapters are numbered in the order they appear, skipping empty ones.
+  const chapters = (
+    [
+      ["story", words.length > 0],
+      ["metrics", project.metrics.length > 0],
+      ["highlights", project.highlights.length > 0],
+      ["gallery", project.media.length > 0],
+      ["facts", true],
+    ] as const
+  )
+    .filter(([, shown]) => shown)
+    .map(([name]) => name);
+  const chapter = (name: (typeof chapters)[number]) =>
+    pad(chapters.indexOf(name) + 1);
 
   return (
     <dialog
@@ -153,11 +171,11 @@ export function ProjectShowcase({
           <div className="showcase-intro">
             <div className="showcase-intro-main">
               <p className="showcase-kicker">
-                <span>{project.category}</span>
+                <span>{projectKindLabels[project.kind]}</span>
                 <span className="showcase-kicker-divider" aria-hidden="true">
                   ·
                 </span>
-                <span>{project.year}</span>
+                <span>{period}</span>
               </p>
               <h2 id="showcase-title" className="showcase-title">
                 <span className="big-index" aria-hidden="true">
@@ -174,14 +192,12 @@ export function ProjectShowcase({
                   <dt>Rôle</dt>
                   <dd>{project.role}</dd>
                 </div>
-                {project.technologies.length > 0 && (
-                  <div>
-                    <dt>Stack</dt>
-                    <dd>{project.technologies.join(" · ")}</dd>
-                  </div>
-                )}
+                <div>
+                  <dt>{project.client ? "Client" : "Type"}</dt>
+                  <dd>{project.client ?? project.category}</dd>
+                </div>
               </dl>
-              <ProjectLinks project={project} />
+              <ProjectLinks project={project} limit={2} />
             </div>
           </div>
 
@@ -201,7 +217,7 @@ export function ProjectShowcase({
           >
             <div className="showcase-story-sticky">
               <h3 id="showcase-story-heading" className="showcase-label">
-                <span>01</span> Le projet
+                <span>{chapter("story")}</span> Le projet
               </h3>
               <p className="showcase-story-text">
                 <span className="sr-only">{project.description}</span>
@@ -221,6 +237,85 @@ export function ProjectShowcase({
           </section>
         )}
 
+        {project.metrics.length > 0 && (
+          <section
+            className="showcase-metrics"
+            aria-labelledby="showcase-metrics-heading"
+          >
+            <h3
+              id="showcase-metrics-heading"
+              className="showcase-label showcase-reveal"
+            >
+              <span>{chapter("metrics")}</span> En chiffres
+            </h3>
+            <dl>
+              {project.metrics.map(({ value, label }, metricIndex) => (
+                <div
+                  key={label}
+                  className="showcase-metric showcase-reveal"
+                  style={{ "--i": metricIndex } as CSSProperties}
+                >
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
+
+        {project.highlights.length > 0 && (
+          <section
+            className="showcase-highlights"
+            aria-labelledby="showcase-highlights-heading"
+          >
+            <h3
+              id="showcase-highlights-heading"
+              className="showcase-label showcase-reveal"
+            >
+              <span>{chapter("highlights")}</span> Points clés
+            </h3>
+            <ol>
+              {project.highlights.map((highlight, highlightIndex) => (
+                <li key={highlight} className="showcase-reveal">
+                  <span className="showcase-highlight-index" aria-hidden="true">
+                    {pad(highlightIndex + 1)}
+                  </span>
+                  {highlight}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {project.media.length > 0 && (
+          <section
+            className="showcase-gallery"
+            aria-labelledby="showcase-gallery-heading"
+          >
+            <h3
+              id="showcase-gallery-heading"
+              className="showcase-label showcase-reveal"
+            >
+              <span>{chapter("gallery")}</span> En images
+            </h3>
+            <div className="showcase-gallery-grid">
+              {project.media.map((item) => (
+                <figure key={item.url} className="showcase-reveal">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.url}
+                    alt={item.alt}
+                    loading="lazy"
+                    decoding="async"
+                    onError={recoverArtwork}
+                  />
+                  {item.caption && <figcaption>{item.caption}</figcaption>}
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section
           className="showcase-facts"
           aria-labelledby="showcase-facts-heading"
@@ -229,54 +324,35 @@ export function ProjectShowcase({
             id="showcase-facts-heading"
             className="showcase-label showcase-reveal"
           >
-            <span>02</span> En bref
+            <span>{chapter("facts")}</span> En bref
           </h3>
           <dl>
-            {facts.map(({ label, value }, factIndex) => (
-              <div
-                key={label}
-                className="showcase-fact showcase-reveal"
-                style={{ "--i": factIndex } as CSSProperties}
-              >
-                <span className="big-index" aria-hidden="true">
-                  {pad(factIndex + 1)}
-                </span>
+            {facts.map(({ label, value }) => (
+              <div key={label} className="showcase-fact showcase-reveal">
                 <dt>{label}</dt>
                 <dd>{value}</dd>
               </div>
             ))}
           </dl>
+          {project.technologies.length > 0 && (
+            <div className="showcase-stack showcase-reveal">
+              <h4 className="showcase-stack-heading">Technologies</h4>
+              <ul>
+                {project.technologies.map((technology) => (
+                  <li key={technology}>{technology}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
 
-        {project.technologies.length > 0 && (
-          <section
-            className="showcase-stack"
-            aria-labelledby="showcase-stack-heading"
-          >
-            <h3
-              id="showcase-stack-heading"
-              className="showcase-label showcase-reveal"
-            >
-              <span>03</span> Technologies
-            </h3>
-            <ul>
-              {project.technologies.map((technology, technologyIndex) => (
-                <li
-                  key={`${technology}-${technologyIndex}`}
-                  className="showcase-reveal"
-                >
-                  <span className="showcase-stack-index" aria-hidden="true">
-                    {pad(technologyIndex + 1)}
-                  </span>
-                  {technology}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {(project.liveUrl || project.sourceUrl || isDemo) && (
+        {(project.links.length > 0 || project.notice || isDemo) && (
           <section className="showcase-visit showcase-reveal">
+            {project.notice && (
+              <p className="showcase-notice" role="note">
+                {project.notice}
+              </p>
+            )}
             <ProjectLinks project={project} />
             {isDemo && (
               <p className="showcase-demo-note">
@@ -318,34 +394,32 @@ export function ProjectShowcase({
   );
 }
 
-function ProjectLinks({ project }: { project: Project }) {
-  if (!project.liveUrl && !project.sourceUrl) return null;
+function ProjectLinks({
+  project,
+  limit,
+}: {
+  project: Project;
+  /** The hero keeps to the main links; the visit chapter lists them all. */
+  limit?: number;
+}) {
+  if (project.links.length === 0) return null;
   return (
     <div className="showcase-links">
-      {project.liveUrl && (
+      {project.links.slice(0, limit).map((link, linkIndex) => (
         <a
-          className="pixel-button pixel-button-light"
-          href={project.liveUrl}
+          key={link.url}
+          className={
+            linkIndex === 0 ? "pixel-button pixel-button-light" : "pixel-button"
+          }
+          href={link.url}
           target="_blank"
           rel="noopener noreferrer"
         >
-          Voir le site
+          {link.label}
           <ArrowUpRight size={16} aria-hidden="true" />
           <span className="sr-only"> (nouvel onglet)</span>
         </a>
-      )}
-      {project.sourceUrl && (
-        <a
-          className="pixel-button"
-          href={project.sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Code source
-          <ArrowUpRight size={16} aria-hidden="true" />
-          <span className="sr-only"> (nouvel onglet)</span>
-        </a>
-      )}
+      ))}
     </div>
   );
 }

@@ -1604,39 +1604,130 @@ body {
   filter: blur(calc((1 - var(--o)) * 5px));
 }
 
-.showcase-facts {
+/* Shared rhythm of the chapters after the story. */
+:is(
+  .showcase-metrics,
+  .showcase-highlights,
+  .showcase-gallery,
+  .showcase-facts,
+  .showcase-visit
+) {
   display: grid;
   gap: 2rem;
-  padding: clamp(5rem, 14svh, 10rem) var(--page-gutter);
+  padding: clamp(4.5rem, 12svh, 8rem) var(--page-gutter) 0;
+}
+
+.showcase-metrics dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 2.5rem 2rem;
+  margin: 0;
+}
+
+.showcase-metric {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--phosphor-line);
+}
+
+.showcase-metric dd {
+  order: -1;
+  margin: 0;
+  font-size: clamp(3rem, 7vw, 6.5rem);
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.065em;
+  line-height: 0.9;
+  white-space: nowrap;
+}
+
+.showcase-metric dt {
+  max-width: 18rem;
+  color: var(--phosphor-dim);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.showcase-highlights ol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 clamp(2rem, 5vw, 5rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.showcase-highlights li {
+  display: flex;
+  align-items: baseline;
+  gap: 1.25rem;
+  padding: clamp(1.1rem, 2.6svh, 1.6rem) 0;
+  border-top: 1px solid var(--phosphor-line);
+  font-size: clamp(1.1rem, 1.55vw, 1.45rem);
+  letter-spacing: -0.025em;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+.showcase-highlight-index {
+  flex-shrink: 0;
+  min-width: 2ch;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.showcase-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+}
+
+/* The first screenshot leads, full width; an odd last one closes the same way. */
+.showcase-gallery-grid figure:first-child,
+.showcase-gallery-grid figure:last-child:nth-child(even) {
+  grid-column: 1 / -1;
+}
+
+.showcase-gallery-grid figure {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.showcase-gallery-grid img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--phosphor-line);
+  border-radius: 0.5rem;
+  background: #ffffff0a;
+}
+
+.showcase-gallery-grid figcaption {
+  color: var(--phosphor-dim);
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
 .showcase-facts dl {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2.5rem 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 2rem;
   margin: 0;
-  padding-top: clamp(2.5rem, 6svh, 4rem);
-  border-top: 1px solid var(--phosphor-line);
 }
 
 .showcase-fact {
-  position: relative;
-  isolation: isolate;
   display: grid;
   align-content: start;
-  gap: 0.6rem;
-  width: fit-content;
-  min-width: min(100%, 13rem);
-  max-width: 100%;
+  gap: 0.5rem;
   padding-top: 1.25rem;
-  padding-right: 1.75rem;
-}
-
-.showcase-fact .big-index {
-  top: -0.55em;
-  right: -0.1em;
-  font-size: clamp(4rem, 6.5vw, 6.5rem);
-  opacity: 0.85;
+  border-top: 1px solid var(--phosphor-line);
 }
 
 .showcase-fact dt {
@@ -1646,53 +1737,55 @@ body {
 
 .showcase-fact dd {
   margin: 0;
-  font-size: clamp(1.35rem, 2.2vw, 2.1rem);
-  font-weight: 450;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
+  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  text-wrap: pretty;
 }
 
 .showcase-stack {
   display: grid;
-  gap: 2rem;
-  padding: 0 var(--page-gutter) clamp(5rem, 14svh, 10rem);
+  gap: 0.9rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--phosphor-line);
+}
+
+.showcase-stack-heading {
+  margin: 0;
+  color: var(--phosphor-dim);
+  font-size: 0.85rem;
+  font-weight: 400;
 }
 
 .showcase-stack ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--phosphor-line);
   list-style: none;
 }
 
 .showcase-stack li {
-  display: flex;
-  align-items: baseline;
-  gap: clamp(1rem, 3vw, 2.5rem);
-  padding: clamp(0.9rem, 2.2svh, 1.4rem) 0;
-  border-bottom: 1px solid var(--phosphor-line);
-  font-size: clamp(2.4rem, 6.5vw, 6.5rem);
-  font-weight: 450;
-  letter-spacing: -0.065em;
-  line-height: 0.95;
-  overflow-wrap: anywhere;
-}
-
-.showcase-stack-index {
-  flex-shrink: 0;
-  min-width: 2ch;
-  color: var(--accent);
-  font-size: 0.9rem;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid var(--phosphor-line);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  letter-spacing: -0.01em;
 }
 
 .showcase-visit {
-  display: grid;
   justify-items: start;
-  gap: 2rem;
-  padding: 0 var(--page-gutter) clamp(5rem, 14svh, 9rem);
+}
+
+.showcase-notice {
+  max-width: 38rem;
+  margin: 0;
+  padding: 0.25rem 0 0.25rem 1.1rem;
+  border-left: 2px solid var(--accent);
+  color: var(--phosphor-dim);
+  font-size: 0.95rem;
+  line-height: 1.6;
 }
 
 .showcase-demo-note {
@@ -1706,6 +1799,7 @@ body {
 /* Footer: the next project, already glowing behind its name. */
 .showcase-footer {
   display: grid;
+  margin-top: clamp(5rem, 14svh, 9rem);
   border-top: 1px solid var(--phosphor-line);
 }
 
@@ -1960,9 +2054,8 @@ body {
     display: none;
   }
 
-  .showcase-facts dl {
+  :is(.showcase-highlights ol, .showcase-gallery-grid) {
     grid-template-columns: minmax(0, 1fr);
-    gap: 2.75rem;
   }
 
   .showcase-next {

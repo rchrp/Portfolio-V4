@@ -13,6 +13,8 @@
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "edges": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-edge-maps.mjs",
     "model": "node scripts/build-model.mjs"
@@ -48,6 +50,7 @@
     "prisma": "^7.9.1",
     "sharp": "0.35.3",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   },
   "packageManager": "pnpm@10.33.2"

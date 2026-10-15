@@ -1,6 +1,7 @@
 // Precomputes the pixel-matrix edge maps once, so browsers never run the filter.
 //
-//   pnpm --filter web edges                    # default sources below
+//   pnpm --filter web edges                    # default sources below,
+//                                              # seeded project covers included
 //   pnpm --filter web edges public/foo.png     # extra files under public/
 //   pnpm --filter web edges https://…/cover.jpg
 //
@@ -10,6 +11,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
+import { seedProjects } from "../prisma/seed-data.ts";
 import { computeEdgeMap } from "../src/lib/edge-detection.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -26,6 +28,7 @@ const defaultSources = [
   ...(await readdir(path.join(publicDirectory, "projects")))
     .filter((file) => imagePattern.test(file))
     .map((file) => `/projects/${file}`),
+  ...seedProjects.map((project) => project.imageUrl),
   "/portrait_3_white_bg_wider.png",
 ];
 

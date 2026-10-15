@@ -13,26 +13,92 @@ enum ProjectStatus {
   ARCHIVED
 }
 
+/// The setting a project was made in, shown as its kicker.
+enum ProjectKind {
+  PRODUCT
+  FREELANCE
+  PERSONAL
+  SCHOOL
+}
+
+enum ProjectLinkKind {
+  WEBSITE
+  SOURCE
+  DOWNLOAD
+  VIDEO
+  COMMUNITY
+}
+
 model Project {
-  id           String        @id @default(cuid())
-  slug         String        @unique @db.VarChar(100)
-  title        String        @db.VarChar(120)
-  summary      String        @db.VarChar(320)
-  description  String        @db.Text
-  category     String        @db.VarChar(80)
-  role         String        @db.VarChar(120)
-  year         Int
-  technologies String[]      @default([])
-  imageUrl     String?       @db.VarChar(2048)
-  imageAlt     String?       @db.VarChar(240)
-  accentColor  String        @default("#f15a24") @db.VarChar(7)
-  liveUrl      String?       @db.VarChar(2048)
-  sourceUrl    String?       @db.VarChar(2048)
-  status       ProjectStatus @default(DRAFT)
-  sortOrder    Int           @default(0)
-  publishedAt  DateTime?     @db.Timestamptz(3)
-  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+  id           String          @id @default(cuid())
+  slug         String          @unique @db.VarChar(100)
+  title        String          @db.VarChar(120)
+  /// One sentence under the title.
+  summary      String          @db.VarChar(320)
+  description  String          @db.Text
+  kind         ProjectKind
+  /// What the project is, e.g. "Application desktop".
+  category     String          @db.VarChar(80)
+  role         String          @db.VarChar(120)
+  client       String?         @db.VarChar(120)
+  startedOn    DateTime        @db.Date
+  /// Null while the project is still going on.
+  endedOn      DateTime?       @db.Date
+  /// Key points, one short sentence each.
+  highlights   String[]        @default([])
+  technologies String[]        @default([])
+  imageUrl     String?         @db.VarChar(2048)
+  imageAlt     String?         @db.VarChar(240)
+  accentColor  String          @default("#f15a24") @db.VarChar(7)
+  /// A caveat visitors should read first, e.g. a platform taken offline.
+  notice       String?         @db.VarChar(400)
+  featured     Boolean         @default(false)
+  status       ProjectStatus   @default(DRAFT)
+  sortOrder    Int             @default(0)
+  publishedAt  DateTime?       @db.Timestamptz(3)
+  createdAt    DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
+  links        ProjectLink[]
+  media        ProjectMedia[]
+  metrics      ProjectMetric[]
 
   @@index([status, sortOrder, createdAt, id])
+}
+
+model ProjectLink {
+  id        String          @id @default(cuid())
+  projectId String
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      ProjectLinkKind
+  label     String          @db.VarChar(60)
+  url       String          @db.VarChar(2048)
+  sortOrder Int             @default(0)
+
+  @@unique([projectId, url])
+  @@index([projectId, sortOrder])
+}
+
+/// Screenshots shown in the project's gallery, after its cover.
+model ProjectMedia {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url       String  @db.VarChar(2048)
+  alt       String  @db.VarChar(240)
+  caption   String? @db.VarChar(160)
+  sortOrder Int     @default(0)
+
+  @@index([projectId, sortOrder])
+}
+
+/// A figure worth a glance, e.g. value "10 000", label "joueurs".
+model ProjectMetric {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  value     String  @db.VarChar(24)
+  label     String  @db.VarChar(80)
+  sortOrder Int     @default(0)
+
+  @@index([projectId, sortOrder])
 }

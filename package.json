@@ -3,11 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter web dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "lint": "pnpm --filter web lint",
     "format": "pnpm --filter web format",
-    "format:check": "pnpm --filter web format:check"
+    "format:check": "pnpm --filter web format:check",
+    "db:up": "docker compose up --detach --wait db",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter web db:migrate",
+    "db:seed": "pnpm --filter web db:seed",
+    "db:reset": "pnpm --filter web db:reset",
+    "db:studio": "pnpm --filter web db:studio"
   },
   "packageManager": "pnpm@10.33.2"
 }

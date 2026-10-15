@@ -12,7 +12,11 @@ import {
 } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
 import { PixelMatrix, type FieldRect } from "@/components/pixel-matrix";
-import type { ProjectCatalog } from "@/lib/projects";
+import {
+  projectKindLabels,
+  projectPeriod,
+  type ProjectCatalog,
+} from "@/lib/projects";
 import { projectsChapter } from "@/lib/site-content";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
 import type { CrtRenderer, TheaterLayout } from "./crt-renderer";
@@ -91,6 +95,9 @@ type Showcase = {
   enterScale: number;
 };
 
+// The chips stay on one or two lines; the showcase lists the whole stack.
+const maxTechnologies = 5;
+
 export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
   const { projects, source } = catalog;
   const sectionRef = useRef<HTMLElement>(null);
@@ -127,7 +134,7 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
       project && {
         slug: project.slug,
         title: project.title,
-        year: project.year,
+        year: project.startYear,
         technologies: project.technologies,
         imageUrl: project.imageUrl,
         accentColor: project.accentColor,
@@ -518,21 +525,32 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
             {project.summary}
           </p>
           <p key={`meta-${project.id}`} className="theater-meta">
-            {project.category} <span aria-hidden="true">·</span> {project.year}
+            {projectKindLabels[project.kind]} <span aria-hidden="true">·</span>{" "}
+            {projectPeriod(project)}
           </p>
           <ul
             key={`tech-${project.id}`}
             className="theater-technologies"
             aria-label="Technologies"
           >
-            {project.technologies.map((technology, index) => (
+            {project.technologies
+              .slice(0, maxTechnologies)
+              .map((technology, index) => (
+                <li
+                  key={`${technology}-${index}`}
+                  style={{ "--i": index } as CSSProperties}
+                >
+                  {technology}
+                </li>
+              ))}
+            {project.technologies.length > maxTechnologies && (
               <li
-                key={`${technology}-${index}`}
-                style={{ "--i": index } as CSSProperties}
+                style={{ "--i": maxTechnologies } as CSSProperties}
+                aria-label={`et ${project.technologies.length - maxTechnologies} autres`}
               >
-                {technology}
+                +{project.technologies.length - maxTechnologies}
               </li>
-            ))}
+            )}
           </ul>
           <button
             ref={triggerRef}

@@ -812,13 +812,13 @@ body {
   inset: 0;
   opacity: calc(0.28 + var(--intro) * 0.36 - var(--outro) * 0.45);
   -webkit-mask-image: radial-gradient(
-    ellipse 75% 85% at 62% 50%,
-    #000 40%,
+    ellipse 85% 90% at 45% 45%,
+    #000 45%,
     transparent 100%
   );
   mask-image: radial-gradient(
-    ellipse 75% 85% at 62% 50%,
-    #000 40%,
+    ellipse 85% 90% at 45% 45%,
+    #000 45%,
     transparent 100%
   );
 }
@@ -835,8 +835,16 @@ body {
 .theater-shade {
   position: absolute;
   inset: 0;
+  /* Darkens behind the project text only: the matrix draws the project's
+     picture in the upper left. */
   background:
-    linear-gradient(90deg, var(--night) 0%, #0c0b09d9 18%, #0c0b0900 46%),
+    radial-gradient(
+      ellipse 48% 52% at 0% 100%,
+      #0c0b09e6 0%,
+      #0c0b09b3 45%,
+      #0c0b0900 100%
+    ),
+    linear-gradient(90deg, #0c0b0999 0%, #0c0b0900 22%),
     linear-gradient(
       to bottom,
       var(--night) 0%,

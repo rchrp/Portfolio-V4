@@ -24,7 +24,8 @@ const INTRO = 1.1;
 const OUTRO = 0.9;
 
 const brandRgb = [241, 90, 36];
-const sideField: FieldRect = { x: 0.34, y: 0.06, width: 0.64, height: 0.88 };
+// Left of the monitor, above the project title: the monitor would hide it.
+const sideField: FieldRect = { x: 0.02, y: 0.07, width: 0.38, height: 0.42 };
 const stackedField: FieldRect = { x: 0, y: 0, width: 1, height: 0.62 };
 
 const clamp = (value: number, minimum: number, maximum: number) =>
@@ -260,6 +261,7 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
             field={powered ? project.edgeMapUrl : null}
             fieldSource={powered ? project.imageUrl : null}
             fieldRect={layout === "side" ? sideField : stackedField}
+            fieldFit={layout === "side" ? "contain" : "cover"}
           />
         </div>
 

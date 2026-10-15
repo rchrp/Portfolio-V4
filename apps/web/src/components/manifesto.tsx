@@ -38,6 +38,9 @@ export function Manifesto() {
       ref={sectionRef}
       className="manifesto"
       aria-labelledby="manifesto-heading"
+      // Once the statement and its disciplines are lit (progress ≈ 0.9 of
+      // the 280svh section).
+      data-nav-stops="1.5"
       style={{ "--n": words.length } as CSSProperties}
     >
       <div className="manifesto-sticky">

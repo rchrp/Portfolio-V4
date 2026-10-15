@@ -52,6 +52,7 @@ export function ProjectShowcase({
   enterScale,
   onClose,
   onNext,
+  onPrevious,
 }: {
   project: Project;
   index: number;
@@ -64,6 +65,7 @@ export function ProjectShowcase({
   enterScale: number;
   onClose: () => void;
   onNext: () => void;
+  onPrevious: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const storyRef = useRef<HTMLElement>(null);
@@ -138,6 +140,20 @@ export function ProjectShowcase({
       onCancel={(event) => {
         event.preventDefault();
         onClose();
+      }}
+      // Left and right change project; up and down still scroll the page.
+      onKeyDown={(event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+          return;
+        const go =
+          event.key === "ArrowRight"
+            ? onNext
+            : event.key === "ArrowLeft"
+              ? onPrevious
+              : null;
+        if (!go) return;
+        event.preventDefault();
+        if (!event.repeat) go();
       }}
     >
       <div className="showcase-bar">

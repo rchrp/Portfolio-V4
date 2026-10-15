@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent,
 } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
 import { PixelMatrix, type FieldRect } from "@/components/pixel-matrix";
@@ -33,6 +32,9 @@ import { ScrambleText } from "./scramble-text";
 // project, then switching it off.
 const INTRO = 1.1;
 const OUTRO = 0.9;
+
+// Where each channel rests, in viewport heights from the top of the section.
+const channelStop = (index: number) => INTRO + index + 0.35;
 
 const brandRgb = [241, 90, 36];
 // Left of the monitor, above the project title: the monitor would hide it.
@@ -257,7 +259,7 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
       const top =
         section.getBoundingClientRect().top +
         window.scrollY +
-        (INTRO + clamp(index, 0, count - 1) + 0.35) * window.innerHeight;
+        channelStop(clamp(index, 0, count - 1)) * window.innerHeight;
       const reduced = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
       ).matches;
@@ -347,25 +349,30 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     void closeShowcase();
   }, [closeShowcase]);
 
-  const showNext = useCallback(() => {
-    const current = showcaseRef.current;
-    if (!current || current.phase !== "open") return;
-    const index = (current.index + 1) % count;
-    const url = new URL(window.location.href);
-    url.searchParams.set(projectParam, projects[index].slug);
-    window.history.replaceState(window.history.state, "", url);
-    updateShowcase(() => ({
-      index,
-      phase: "open",
-      entry: "fade",
-      enterScale: 1,
-    }));
-    // Behind the showcase, tune the monitor to the same channel.
-    scrollToProject(index, true);
-    void rendererRef.current?.setFocusImage(
-      projects[index].imageUrl ?? placeholderArtwork,
-    );
-  }, [count, projects, scrollToProject, updateShowcase]);
+  const showSibling = useCallback(
+    (step: 1 | -1) => {
+      const current = showcaseRef.current;
+      if (!current || current.phase !== "open" || count < 2) return;
+      const index = (current.index + step + count) % count;
+      const url = new URL(window.location.href);
+      url.searchParams.set(projectParam, projects[index].slug);
+      window.history.replaceState(window.history.state, "", url);
+      updateShowcase(() => ({
+        index,
+        phase: "open",
+        entry: "fade",
+        enterScale: 1,
+      }));
+      // Behind the showcase, tune the monitor to the same channel.
+      scrollToProject(index, true);
+      void rendererRef.current?.setFocusImage(
+        projects[index].imageUrl ?? placeholderArtwork,
+      );
+    },
+    [count, projects, scrollToProject, updateShowcase],
+  );
+  const showNext = useCallback(() => showSibling(1), [showSibling]);
+  const showPrevious = useCallback(() => showSibling(-1), [showSibling]);
 
   useEffect(() => {
     const onPopState = () => {
@@ -411,25 +418,13 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     [],
   );
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
-    const next =
-      event.key === "ArrowDown" || event.key === "ArrowRight"
-        ? activeRef.current + 1
-        : event.key === "ArrowUp" || event.key === "ArrowLeft"
-          ? activeRef.current - 1
-          : null;
-    if (next === null || next < 0 || next >= count) return;
-    event.preventDefault();
-    scrollToProject(next);
-  };
-
   if (!project) {
     return (
       <section
         id="projets"
         className="theater theater-empty"
         aria-labelledby="projects-heading"
+        data-nav-stops="0"
       >
         <h2 id="projects-heading">La suite se construit.</h2>
         <p>Les projets seront présentés ici dès leur publication.</p>
@@ -446,6 +441,8 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
       data-powered={powered}
       data-webgl={webgl}
       data-dived={dived || undefined}
+      // The arrow keys rest on each channel (see KeyboardNavigation).
+      data-nav-stops={projects.map((_, index) => channelStop(index)).join(" ")}
       style={
         {
           "--steps": INTRO + count + OUTRO,
@@ -512,7 +509,6 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
           aria-roledescription="chaîne"
           aria-label={`Projet ${active + 1} sur ${count}`}
           tabIndex={0}
-          onKeyDown={onKeyDown}
         >
           <h3 className="theater-title">
             <span
@@ -615,6 +611,7 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
           enterScale={showcase.enterScale}
           onClose={requestClose}
           onNext={showNext}
+          onPrevious={showPrevious}
         />
       )}
     </section>

@@ -47,6 +47,7 @@ export function SiteOutro() {
       id="contact"
       className="outro"
       aria-labelledby="outro-heading"
+      data-nav-stops="0"
     >
       <div className="outro-matrix" aria-hidden="true">
         <PixelMatrix

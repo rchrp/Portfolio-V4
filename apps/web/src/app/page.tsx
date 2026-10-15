@@ -3,9 +3,11 @@ import { Suspense } from "react";
 import { preload } from "react-dom";
 import portrait from "../../public/portrait_3_white_bg_wider.png";
 import { HeroContact } from "@/components/hero-contact";
+import { KeyboardNavigation } from "@/components/keyboard-navigation";
 import { Manifesto } from "@/components/manifesto";
 import { PixelMatrix } from "@/components/pixel-matrix";
 import { PortraitReveal } from "@/components/portrait-reveal";
+import { ScrollHint } from "@/components/scroll-hint";
 import {
   ProjectsLoading,
   ProjectsSection,
@@ -27,6 +29,7 @@ export default function Home() {
       <section
         className="portfolio-hero"
         aria-label="Raphaël Charpentier, développeur freelance"
+        data-nav-stops="0"
       >
         <PixelMatrix
           className="hero-matrix"
@@ -73,6 +76,8 @@ export default function Home() {
           <HeroContact />
         </div>
 
+        <ScrollHint />
+
         <div className="hero-bottom-blur" aria-hidden="true" />
       </section>
       <div className="hero-night-transition" aria-hidden="true">
@@ -83,6 +88,7 @@ export default function Home() {
         <ProjectsSection />
       </Suspense>
       <SiteOutro />
+      <KeyboardNavigation />
     </main>
   );
 }

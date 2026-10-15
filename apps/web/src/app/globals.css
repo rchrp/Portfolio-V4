@@ -506,6 +506,184 @@ body {
   }
 }
 
+/* Bottom right of the hero, level with the contact buttons. */
+.scroll-hint {
+  position: absolute;
+  z-index: 4;
+  right: var(--page-gutter);
+  bottom: clamp(2rem, 5svh, 4.5rem);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 3rem;
+  padding: 0 0.6rem 0 1.1rem;
+  border: 1px solid rgba(17, 17, 14, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  color: rgba(17, 17, 14, 0.72);
+  font: inherit;
+  font-size: clamp(0.75rem, 0.78vw, 0.875rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition:
+    border-color 220ms ease,
+    color 220ms ease;
+}
+
+.scroll-hint:is(:hover, :focus-visible) {
+  border-color: var(--foreground);
+  color: var(--foreground);
+}
+
+.scroll-hint:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* A rail with one pixel running down it. */
+.scroll-hint-track {
+  position: relative;
+  width: 1px;
+  height: 1.5rem;
+  overflow: hidden;
+  background: rgba(17, 17, 14, 0.16);
+}
+
+.scroll-hint-track::after {
+  position: absolute;
+  top: 0;
+  left: -1.5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--accent);
+  content: "";
+  transform: translateY(0.55rem);
+}
+
+.scroll-hint-keys {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.scroll-hint kbd {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid rgba(17, 17, 14, 0.18);
+  border-bottom-width: 2px;
+  border-radius: 0.35rem;
+  background: #fff;
+  color: var(--foreground);
+}
+
+@keyframes scroll-hint-run {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.3rem);
+  }
+
+  25% {
+    opacity: 1;
+  }
+
+  60%,
+  100% {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+}
+
+/* The ↓ key is pressed as the pixel leaves the rail. */
+@keyframes scroll-hint-press {
+  0%,
+  40%,
+  70%,
+  100% {
+    border-bottom-width: 2px;
+    color: var(--foreground);
+    transform: translateY(0);
+  }
+
+  50%,
+  60% {
+    border-bottom-width: 1px;
+    color: var(--accent);
+    transform: translateY(1px);
+  }
+}
+
+@keyframes scroll-hint-depart {
+  to {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .scroll-hint {
+    animation: hero-meta-enter 900ms var(--hero-ease) 1400ms both;
+  }
+
+  .scroll-hint-track::after {
+    animation: scroll-hint-run 2.4s var(--hero-ease) 2.3s infinite both;
+  }
+
+  .scroll-hint kbd[data-pulse] {
+    animation: scroll-hint-press 2.4s ease 2.3s infinite;
+  }
+
+  /* Gone as soon as the page moves. */
+  @supports (animation-timeline: view()) {
+    .scroll-hint {
+      animation:
+        hero-meta-enter 900ms var(--hero-ease) 1400ms both,
+        scroll-hint-depart linear both;
+      animation-timeline: auto, --hero-exit;
+      animation-range:
+        normal,
+        exit 0% exit 30%;
+    }
+  }
+}
+
+/* Touch screens scroll with a finger: no keys, and room for the contact row. */
+@media (hover: none), (max-width: 42rem) {
+  .scroll-hint {
+    gap: 0.6rem;
+    padding-right: 1rem;
+  }
+
+  .scroll-hint-keys {
+    display: none;
+  }
+}
+
+/* The contact row fills the width: the hint rises beside the last name. */
+@media (max-width: 42rem) {
+  .scroll-hint {
+    bottom: calc(
+      max(1.5rem, env(safe-area-inset-bottom)) + 3rem +
+        clamp(1.25rem, 3svh, 2rem)
+    );
+    height: 2.5rem;
+  }
+}
+
+@media (max-width: 23rem) {
+  .scroll-hint {
+    padding: 0 1.2rem;
+  }
+
+  .scroll-hint-label {
+    display: none;
+  }
+}
+
 /* ------------------------------------------------------------------------
    Story chapters: shared tokens
    The lower half of the page switches to a night direction: warm black

@@ -26,6 +26,11 @@ const dim = "#8d8a7f";
 const background = "#0b0c0b";
 const brand = "#f15a24";
 const bootDuration = 1900;
+// The glass bulges and crops the picture's edges a little: keep a margin.
+const margin = 40;
+const menuHeight = 46;
+const menuText = 27;
+const promptY = 722;
 const zoomDuration = 320;
 const bootLeft = SCREEN_WIDTH / 2 - 190;
 const loadDuration = 620;
@@ -183,21 +188,21 @@ export class ScreenComposer {
   private drawMenuBar(right: string) {
     const context = this.context;
     context.fillStyle = phosphor;
-    context.fillRect(0, 0, SCREEN_WIDTH, 38);
+    context.fillRect(0, 0, SCREEN_WIDTH, menuHeight);
     context.fillStyle = background;
-    context.fillRect(0, 38, SCREEN_WIDTH, 2);
+    context.fillRect(0, menuHeight, SCREEN_WIDTH, 2);
     context.fillStyle = brand;
-    context.fillRect(28, 12, 14, 14);
+    context.fillRect(margin + 4, menuText - 7, 14, 14);
     context.fillStyle = background;
     context.font = `600 17px ${this.sans}`;
     context.textBaseline = "middle";
     context.textAlign = "left";
     ["Fichier", "Édition", "Projets", "Contact"].forEach((item, index) => {
-      context.fillText(item, 64 + index * 104, 20);
+      context.fillText(item, margin + 40 + index * 104, menuText);
     });
     context.font = `500 16px ${this.mono}`;
     context.textAlign = "right";
-    context.fillText(right, SCREEN_WIDTH - 28, 20);
+    context.fillText(right, SCREEN_WIDTH - margin - 4, menuText);
   }
 
   private drawBoot(elapsed: number, total: number) {
@@ -268,7 +273,12 @@ export class ScreenComposer {
     context.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     this.drawMenuBar(counter);
 
-    const frame = { x: 70, y: 74, width: SCREEN_WIDTH - 140, height: 590 };
+    const frame = {
+      x: margin,
+      y: menuHeight + 22,
+      width: SCREEN_WIDTH - margin * 2,
+      height: promptY - menuHeight - 66,
+    };
     const zoom = easeOut(clamp01(elapsed / zoomDuration));
 
     // Classic "zoom rects" while the window opens.
@@ -392,16 +402,16 @@ export class ScreenComposer {
     const context = this.context;
     const command = `open ~/projets/${project.slug} --year ${project.year}`;
     const visible = command.slice(0, Math.round(command.length * typed));
-    const y = 712;
+    const y = promptY;
     context.textBaseline = "middle";
     context.textAlign = "left";
     context.font = `500 19px ${this.mono}`;
     context.fillStyle = brand;
-    context.fillText(">", 70, y);
+    context.fillText(">", margin, y);
     context.fillStyle = phosphor;
-    context.fillText(visible, 96, y);
+    context.fillText(visible, margin + 26, y);
     if (cursorOn || typed < 1) {
-      const x = 96 + context.measureText(visible).width + 4;
+      const x = margin + 26 + context.measureText(visible).width + 4;
       context.fillRect(x, y - 11, 11, 22);
     }
     context.textAlign = "right";
@@ -409,7 +419,7 @@ export class ScreenComposer {
     context.font = `400 16px ${this.mono}`;
     context.fillText(
       project.technologies.slice(0, 3).join(" · "),
-      SCREEN_WIDTH - 70,
+      SCREEN_WIDTH - margin,
       y,
     );
   }

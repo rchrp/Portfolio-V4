@@ -48,9 +48,9 @@ const screenFragment = /* glsl */ `
 
   void main() {
     vec2 centered = vUv * 2.0 - 1.0;
-    // Fit the picture inside the bezel, then bulge it like curved glass.
-    vec2 curved = centered * 1.07;
-    curved *= 1.0 + 0.055 * dot(curved, curved);
+    // Bulge the picture like curved glass while it keeps filling the whole
+    // tube: lines bow, the corners stay pinned to the glass corners.
+    vec2 curved = centered * (1.0 + 0.035 * centered.yx * centered.yx) / 1.035;
     vec2 uv = curved * 0.5 + 0.5;
 
     float openX = smoothstep(0.0, 0.32, uPower);
@@ -83,10 +83,10 @@ const screenFragment = /* glsl */ `
     color = mix(color, vec3(grain), 0.035 + uGlitch * 0.4);
     color *= 0.985 + 0.015 * sin(uTime * 110.0);
 
-    vec2 edge = smoothstep(vec2(0.0), vec2(0.012, 0.016), powered)
-      * smoothstep(vec2(0.0), vec2(0.012, 0.016), 1.0 - powered);
+    vec2 edge = smoothstep(vec2(0.0), vec2(0.004, 0.006), powered)
+      * smoothstep(vec2(0.0), vec2(0.004, 0.006), 1.0 - powered);
     float inside = edge.x * edge.y;
-    float vignette = clamp(1.0 - dot(centered * vec2(0.55, 0.65), centered * vec2(0.55, 0.65)) * 0.9, 0.0, 1.0);
+    float vignette = clamp(1.0 - dot(centered * vec2(0.55, 0.65), centered * vec2(0.55, 0.65)) * 0.55, 0.0, 1.0);
     float line = (1.0 - smoothstep(0.0, 0.25, openY)) * exp(-abs(uv.y - 0.5) * 260.0) * openX
       * step(abs(uv.x - 0.5), 0.5 * openX);
     float visible = smoothstep(0.0, 0.08, uPower);

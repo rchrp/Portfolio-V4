@@ -21,18 +21,27 @@ export function ProjectDialog({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  // Captured once: a re-run effect (Strict Mode) must not overwrite them.
+  const restoreRef = useRef<{
+    trigger: HTMLElement | null;
+    overflow: string;
+  } | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const trigger = document.activeElement as HTMLElement | null;
-    dialog.showModal();
-    const previousOverflow = document.body.style.overflow;
+    restoreRef.current ??= {
+      trigger: document.activeElement as HTMLElement | null,
+      overflow: document.body.style.overflow,
+    };
+    const restore = restoreRef.current;
+    if (!dialog.open) dialog.showModal();
     document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = previousOverflow;
-      dialog.close();
-      trigger?.focus({ preventScroll: true });
+      // No dialog.close() here: its close event would call onClose. The
+      // element leaves the top layer when React removes it.
+      document.body.style.overflow = restore.overflow;
+      restore.trigger?.focus({ preventScroll: true });
     };
   }, []);
 

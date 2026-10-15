@@ -16,12 +16,14 @@ export type ScrollFrame = {
  * Calls `onFrame` at most once per animation frame while the page scrolls or
  * resizes, with the position of a tall (usually sticky) element.
  * `start` shifts the origin, in viewports: -1 starts as soon as the element
- * enters from the bottom of the screen.
+ * enters from the bottom of the screen. `scrollerRef` measures against a
+ * scrolling element instead of the window.
  */
 export function useScrollProgress<T extends HTMLElement>(
   ref: RefObject<T | null>,
   onFrame: (frame: ScrollFrame) => void,
   start = 0,
+  scrollerRef?: RefObject<HTMLElement | null>,
 ) {
   const callbackRef = useRef(onFrame);
 
@@ -32,17 +34,18 @@ export function useScrollProgress<T extends HTMLElement>(
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
+    const scroller = scrollerRef?.current ?? null;
+    const target: HTMLElement | Window = scroller ?? window;
     let frame = 0;
 
     const measure = () => {
       frame = 0;
       const bounds = element.getBoundingClientRect();
-      const viewport = window.innerHeight;
+      const viewport = scroller ? scroller.clientHeight : window.innerHeight;
+      const top =
+        bounds.top - (scroller ? scroller.getBoundingClientRect().top : 0);
       const length = Math.max(1, bounds.height - viewport - start * viewport);
-      const offset = Math.min(
-        length,
-        Math.max(0, -bounds.top - start * viewport),
-      );
+      const offset = Math.min(length, Math.max(0, -top - start * viewport));
       callbackRef.current({
         progress: offset / length,
         offset,
@@ -56,12 +59,12 @@ export function useScrollProgress<T extends HTMLElement>(
     };
 
     measure();
-    window.addEventListener("scroll", schedule, { passive: true });
+    target.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule, { passive: true });
     return () => {
-      window.removeEventListener("scroll", schedule);
+      target.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, [ref, start]);
+  }, [ref, start, scrollerRef]);
 }

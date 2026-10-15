@@ -604,13 +604,12 @@ body {
   transform: scale(1.05);
 }
 
-:is(.theater, .outro, .project-dialog)
-  :is(button, a, [tabindex]):focus-visible {
+:is(.theater, .outro, .showcase) :is(button, a, [tabindex]):focus-visible {
   outline: 2px solid #ff935d;
   outline-offset: 4px;
 }
 
-:is(.theater, .project-dialog) button {
+:is(.theater, .showcase) button {
   font-family: inherit;
   cursor: pointer;
 }
@@ -1233,156 +1232,751 @@ body {
   }
 }
 
+/* While the camera dives into the monitor, the room goes quiet. */
+.theater[data-dived] :is(.theater-header, .theater-info, .theater-rail) {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(1.25rem);
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease,
+    visibility 0s linear 400ms;
+}
+
+/* The matrix's own opacity follows the scroll: fade its canvas instead. */
+.theater-shade,
+.theater-matrix > canvas {
+  transition: opacity 700ms ease;
+}
+
+.theater[data-dived] :is(.theater-shade, .theater-matrix > canvas) {
+  opacity: 0;
+}
+
 /* ------------------------------------------------------------------------
-   Project dialog: a retro window
+   Project showcase: the monitor's picture, now the whole screen
    ------------------------------------------------------------------------ */
 
-.project-dialog {
+.showcase {
+  --showcase-blur-height: clamp(22rem, 62svh, 44rem);
+  color-scheme: dark;
   position: fixed;
-  width: min(56rem, calc(100% - 2rem));
-  max-height: 90svh;
-  margin: auto;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
   padding: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
-  border: 2px solid var(--phosphor);
-  border-radius: 0;
-  background: #11100e;
+  border: 0;
+  background: var(--night);
   color: var(--phosphor);
-  box-shadow: 0.6rem 0.6rem 0 #000;
+  opacity: 0;
+  transition: opacity 260ms linear;
 }
 
-.project-dialog::backdrop {
-  background: #0c0b09b3;
-  backdrop-filter: blur(6px);
+.showcase::backdrop {
+  background: transparent;
 }
 
-.project-dialog-bar {
-  position: sticky;
-  z-index: 2;
+.showcase[data-phase="open"] {
+  opacity: 1;
+}
+
+.showcase[data-phase="closing"] {
+  opacity: 0;
+  transition: opacity 300ms ease 400ms;
+}
+
+.showcase-bar {
+  position: fixed;
+  z-index: 5;
   top: 0;
+  right: 0;
+  left: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 2.6rem;
-  background:
-    repeating-linear-gradient(to bottom, var(--phosphor) 0 2px, #11100e 2px 4px)
-      center / calc(100% - 1rem) 1.5rem no-repeat,
-    var(--phosphor);
+  justify-content: space-between;
+  gap: 1rem;
+  padding: clamp(1rem, 2.5vw, 2rem) var(--page-gutter);
+  pointer-events: none;
 }
 
-.project-dialog-bar > span {
-  padding: 0 1rem;
-  background: var(--phosphor);
-  color: #11100e;
+.showcase-back,
+.showcase-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0 1.15rem 0 0.95rem;
+  border: 1px solid var(--phosphor-line);
+  border-radius: 999px;
+  background: #0c0b0966;
+  color: var(--phosphor);
+  font-size: 0.9rem;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  pointer-events: auto;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  transition:
+    border-color 220ms ease,
+    background-color 220ms ease;
+}
+
+.showcase-back:hover {
+  border-color: var(--phosphor);
+  background: #0c0b09a6;
+}
+
+.showcase-counter {
+  gap: 0;
+  padding: 0 1.1rem;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
 }
 
-.project-dialog-close {
+/* Hero: the picture, blurred deeper and deeper towards the bottom, where the
+   project introduces itself. */
+.showcase-hero {
+  position: relative;
+  isolation: isolate;
+  height: 100svh;
+  overflow: hidden;
+}
+
+.showcase-picture {
   position: absolute;
-  left: 0.6rem;
-  display: grid;
-  place-items: center;
-  width: 1.8rem;
-  height: 1.8rem;
-  padding: 0;
-  border: 2px solid #11100e;
-  background: var(--phosphor);
-  color: #11100e;
+  inset: 0;
 }
 
-.project-dialog-art img {
+.showcase-picture img {
   display: block;
   width: 100%;
-  aspect-ratio: 8 / 5;
+  height: 100%;
   object-fit: cover;
 }
 
-.project-dialog-content {
-  padding: clamp(1.5rem, 5vw, 3.5rem);
+.showcase-blur {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--showcase-blur-height);
+  pointer-events: none;
+}
+
+.showcase-blur::before,
+.showcase-blur::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  -webkit-backdrop-filter: blur(var(--blur));
+  backdrop-filter: blur(var(--blur));
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent var(--fade-start),
+    #000 var(--fade-end)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent var(--fade-start),
+    #000 var(--fade-end)
+  );
+}
+
+.showcase-blur::before {
+  --blur: 14px;
+  --fade-start: 0%;
+  --fade-end: 50%;
+}
+
+/* The deepest layer also darkens, down to the night of the next chapters. */
+.showcase-blur::after {
+  --blur: 44px;
+  --fade-start: 18%;
+  --fade-end: 72%;
+  background: linear-gradient(
+    to bottom,
+    #0c0b0900 0%,
+    #0c0b0966 32%,
+    #0c0b09b3 60%,
+    #0c0b09e0 86%,
+    var(--night) 100%
+  );
+}
+
+.showcase-intro {
+  position: absolute;
+  z-index: 2;
+  right: var(--page-gutter);
+  bottom: clamp(3.5rem, 9svh, 6.5rem);
+  left: var(--page-gutter);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 24rem);
+  align-items: end;
+  gap: 2rem clamp(2rem, 6vw, 6rem);
+}
+
+.showcase-intro-main {
+  display: grid;
+  justify-items: start;
+}
+
+.showcase-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 clamp(1rem, 2.5svh, 1.75rem);
+  color: #ece8dacc;
+  font-size: clamp(0.8rem, 0.85vw, 0.95rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.showcase-kicker-divider {
+  color: var(--accent);
+}
+
+.showcase-title {
+  position: relative;
+  isolation: isolate;
+  max-width: 100%;
+  margin: 0;
+  font-size: clamp(4.25rem, 12vw, 12.5rem);
+  font-weight: 450;
+  letter-spacing: -0.07em;
+  line-height: 0.84;
   overflow-wrap: anywhere;
 }
 
-.project-dialog-meta {
-  margin: 0 0 1rem;
-  color: var(--phosphor-dim);
-  font-size: 0.95rem;
+.showcase-title .big-index {
+  top: -0.32em;
+  right: -0.5em;
+  font-size: 0.55em;
 }
 
-.project-dialog-content h2 {
+.showcase-summary {
+  max-width: 30rem;
+  margin: clamp(1.1rem, 2.5svh, 1.75rem) 0 0;
+  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  letter-spacing: -0.02em;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+.showcase-intro-side {
+  display: grid;
+  gap: 1.5rem;
+  padding-bottom: 0.4rem;
+}
+
+.showcase-glance {
+  display: grid;
+  gap: 1rem;
   margin: 0;
-  font-size: clamp(3rem, 6vw, 5rem);
+  padding-top: 1rem;
+  border-top: 1px solid var(--phosphor-line);
+}
+
+.showcase-glance dt {
+  margin-bottom: 0.25rem;
+  color: var(--phosphor-dim);
+  font-size: 0.8rem;
+}
+
+.showcase-glance dd {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.showcase-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.pixel-button-light {
+  --pixel-button-ink: var(--night);
+  border-color: var(--phosphor);
+  background: var(--phosphor);
+}
+
+.pixel-button-light:is(:hover, :focus-visible) {
+  border-color: #fff;
+  background: #fff;
+}
+
+.showcase-cue {
+  position: absolute;
+  z-index: 2;
+  bottom: clamp(1rem, 2.5svh, 1.75rem);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  color: var(--phosphor-dim);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  translate: -50% 0;
+}
+
+.showcase-cue span {
+  position: relative;
+  width: 1px;
+  height: 1.75rem;
+  overflow: hidden;
+  background: var(--phosphor-line);
+}
+
+.showcase-cue span::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: var(--accent);
+  transform: translateY(-100%);
+}
+
+/* Chapters */
+.showcase-label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0;
+  color: var(--phosphor-dim);
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.showcase-label > span {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.showcase-story {
+  --words: 0;
+  position: relative;
+  height: 260svh;
+}
+
+.showcase-story-sticky {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(1.5rem, 4svh, 2.75rem);
+  height: 100svh;
+  padding: 0 var(--page-gutter);
+}
+
+.showcase-story-text {
+  max-width: 20em;
+  margin: 0;
+  font-size: clamp(2rem, 4.4vw, 4.6rem);
+  font-weight: 450;
+  letter-spacing: -0.05em;
+  line-height: 1.04;
+  text-wrap: pretty;
+}
+
+.showcase-story[data-length="long"] .showcase-story-text {
+  max-width: 30em;
+  font-size: clamp(1.35rem, 2.5vw, 2.6rem);
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.showcase-word {
+  /* Each word lights up across a window of six words. */
+  --o: clamp(0, calc((var(--words) * (var(--n) + 6) - var(--i)) / 6), 1);
+  opacity: calc(0.12 + 0.88 * var(--o));
+  filter: blur(calc((1 - var(--o)) * 5px));
+}
+
+.showcase-facts {
+  display: grid;
+  gap: 2rem;
+  padding: clamp(5rem, 14svh, 10rem) var(--page-gutter);
+}
+
+.showcase-facts dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2.5rem 2rem;
+  margin: 0;
+  padding-top: clamp(2.5rem, 6svh, 4rem);
+  border-top: 1px solid var(--phosphor-line);
+}
+
+.showcase-fact {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  width: fit-content;
+  min-width: min(100%, 13rem);
+  max-width: 100%;
+  padding-top: 1.25rem;
+  padding-right: 1.75rem;
+}
+
+.showcase-fact .big-index {
+  top: -0.55em;
+  right: -0.1em;
+  font-size: clamp(4rem, 6.5vw, 6.5rem);
+  opacity: 0.85;
+}
+
+.showcase-fact dt {
+  color: var(--phosphor-dim);
+  font-size: 0.85rem;
+}
+
+.showcase-fact dd {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.2vw, 2.1rem);
+  font-weight: 450;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.showcase-stack {
+  display: grid;
+  gap: 2rem;
+  padding: 0 var(--page-gutter) clamp(5rem, 14svh, 10rem);
+}
+
+.showcase-stack ul {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--phosphor-line);
+  list-style: none;
+}
+
+.showcase-stack li {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(1rem, 3vw, 2.5rem);
+  padding: clamp(0.9rem, 2.2svh, 1.4rem) 0;
+  border-bottom: 1px solid var(--phosphor-line);
+  font-size: clamp(2.4rem, 6.5vw, 6.5rem);
   font-weight: 450;
   letter-spacing: -0.065em;
   line-height: 0.95;
+  overflow-wrap: anywhere;
 }
 
-.project-dialog-description {
-  margin: 1.5rem 0 2rem;
-  color: #c9c5b8;
-  font-size: 1rem;
-  line-height: 1.8;
-  white-space: pre-line;
+.showcase-stack-index {
+  flex-shrink: 0;
+  min-width: 2ch;
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 
-.project-dialog dl {
+.showcase-visit {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
+  justify-items: start;
+  gap: 2rem;
+  padding: 0 var(--page-gutter) clamp(5rem, 14svh, 9rem);
+}
+
+.showcase-demo-note {
+  max-width: 34rem;
   margin: 0;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--phosphor-line);
-}
-
-.project-dialog dt {
-  margin-bottom: 0.5rem;
   color: var(--phosphor-dim);
-  font-size: 0.85rem;
-}
-
-.project-dialog dd {
-  margin: 0;
-  font-size: 0.85rem;
-  line-height: 1.6;
-}
-
-.project-dialog-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-}
-
-.project-dialog-links a {
-  display: inline-flex;
-  align-items: center;
-  gap: 1rem;
-  min-height: 2.75rem;
-  margin-top: 1rem;
-  color: inherit;
-  font-size: 0.95rem;
-  text-underline-offset: 5px;
-}
-
-.project-demo-note {
-  margin: 2rem 0 0;
-  padding-top: 1rem;
-  border-top: 1px solid var(--phosphor-line);
-  color: var(--phosphor-dim);
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   line-height: 1.7;
 }
 
-@keyframes dialog-open {
+/* Footer: the next project, already glowing behind its name. */
+.showcase-footer {
+  display: grid;
+  border-top: 1px solid var(--phosphor-line);
+}
+
+.showcase-next {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  align-content: end;
+  justify-items: start;
+  gap: 1rem;
+  min-height: 78svh;
+  padding: var(--page-gutter);
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--phosphor);
+  text-align: left;
+}
+
+.showcase-next-picture {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+}
+
+.showcase-next-picture::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    to bottom,
+    var(--night) 0%,
+    #0c0b0999 35%,
+    #0c0b09cc 100%
+  );
+}
+
+.showcase-next-picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.55;
+  filter: saturate(0.6);
+  transform: scale(1.04);
+  transition:
+    opacity 700ms ease,
+    filter 700ms ease,
+    transform 1200ms var(--hero-ease);
+}
+
+.showcase-next:is(:hover, :focus-visible) .showcase-next-picture img {
+  opacity: 0.85;
+  filter: none;
+  transform: none;
+}
+
+.showcase-next-title {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(1rem, 2.5vw, 2rem);
+  font-size: clamp(4rem, 12vw, 12.5rem);
+  font-weight: 450;
+  letter-spacing: -0.07em;
+  line-height: 0.84;
+}
+
+.showcase-next-title .pixel-arrow {
+  grid-template-columns: repeat(3, 0.08em);
+  grid-auto-rows: 0.08em;
+  gap: 0.03em;
+}
+
+.showcase-next:is(:hover, :focus-visible) .pixel-arrow span {
+  opacity: 0.12;
+  transform: scale(0.35);
+}
+
+.showcase-next:is(:hover, :focus-visible) .pixel-arrow span[data-arrow] {
+  background: var(--accent);
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.showcase-return {
+  justify-self: start;
+  margin: clamp(2rem, 5svh, 3rem) var(--page-gutter);
+}
+
+/* Entering: the picture first matches the glass, then settles. The text
+   and the blur come in once the glass is gone. */
+@keyframes showcase-rise {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: translateY(1.5rem);
+    filter: blur(6px);
+  }
+}
+
+@keyframes showcase-settle {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes showcase-cue {
+  0% {
+    transform: translateY(-100%);
+  }
+
+  60%,
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes showcase-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(2.5rem);
+    filter: blur(6px);
+  }
+}
+
+@keyframes showcase-picture-exit {
+  to {
+    opacity: 0.3;
+    transform: translateY(22%) scale(1.08);
+  }
+}
+
+@keyframes showcase-intro-exit {
+  to {
+    opacity: 0;
+    transform: translateY(-3rem);
+    filter: blur(8px);
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .project-dialog[open] {
-    animation: dialog-open 260ms var(--hero-ease) both;
+  .showcase[data-entry="dive"] .showcase-picture img {
+    transform: scale(var(--enter-scale));
+    transition: transform 1300ms var(--hero-ease) 260ms;
+  }
+
+  .showcase[data-entry="dive"][data-phase="open"] .showcase-picture img {
+    transform: none;
+  }
+
+  .showcase[data-entry="fade"][data-phase="open"] .showcase-picture img {
+    animation: showcase-settle 1200ms var(--hero-ease) both;
+  }
+
+  .showcase[data-phase="closing"] .showcase-picture img {
+    transform: scale(var(--enter-scale));
+    transition: transform 650ms var(--hero-ease);
+  }
+
+  .showcase:not([data-phase="open"]) :is(.showcase-bar, .showcase-intro),
+  .showcase:not([data-phase="open"]) .showcase-blur::before,
+  .showcase:not([data-phase="open"]) .showcase-blur::after,
+  .showcase:not([data-phase="open"]) .showcase-cue {
+    opacity: 0;
+    transition: opacity 300ms ease;
+  }
+
+  /* An opacity-animated parent would isolate the layers from the picture. */
+  .showcase-blur::before,
+  .showcase-blur::after {
+    transition: opacity 900ms ease 300ms;
+  }
+
+  .showcase-bar {
+    transition: opacity 600ms ease 900ms;
+  }
+
+  .showcase[data-phase="open"] .showcase-kicker {
+    animation: showcase-rise 900ms var(--hero-ease) 500ms both;
+  }
+
+  .showcase[data-phase="open"] .showcase-title {
+    animation: showcase-rise 1100ms var(--hero-ease) 580ms both;
+  }
+
+  .showcase[data-phase="open"] .showcase-summary {
+    animation: showcase-rise 900ms var(--hero-ease) 700ms both;
+  }
+
+  .showcase[data-phase="open"] .showcase-intro-side {
+    animation: showcase-rise 900ms var(--hero-ease) 800ms both;
+  }
+
+  .showcase-cue {
+    transition: opacity 800ms ease 1200ms;
+  }
+
+  .showcase-cue span::after {
+    animation: showcase-cue 2.2s var(--hero-ease) infinite;
+  }
+
+  @supports (animation-timeline: view()) {
+    .showcase-hero {
+      view-timeline-name: --showcase-hero;
+    }
+
+    .showcase-picture {
+      animation: showcase-picture-exit linear both;
+      animation-timeline: --showcase-hero;
+      animation-range: exit 0% exit 100%;
+    }
+
+    :is(.showcase-intro, .showcase-cue) {
+      animation: showcase-intro-exit linear both;
+      animation-timeline: --showcase-hero;
+      animation-range: exit 0% exit 60%;
+    }
+
+    .showcase-reveal {
+      animation: showcase-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 5% entry 90%;
+    }
+  }
+}
+
+@media (max-width: 52rem), (max-aspect-ratio: 4/5) {
+  .showcase {
+    --showcase-blur-height: clamp(26rem, 78svh, 40rem);
+  }
+
+  .showcase-intro {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    bottom: clamp(3.75rem, 9svh, 5rem);
+  }
+
+  .showcase-title {
+    font-size: clamp(3.4rem, 17vw, 6rem);
+  }
+
+  .showcase-intro-side {
+    gap: 1.1rem;
+  }
+
+  .showcase-glance {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .showcase-cue {
+    display: none;
+  }
+
+  .showcase-facts dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2.75rem;
+  }
+
+  .showcase-next {
+    min-height: 60svh;
+  }
+}
+
+@media (max-height: 40rem) and (min-width: 52.01rem) {
+  .showcase-title {
+    font-size: clamp(3.5rem, 18svh, 8rem);
+  }
+
+  .showcase-summary {
+    margin-top: 0.75rem;
   }
 }
 
@@ -1526,9 +2120,9 @@ body {
     filter: none;
   }
 
-  :is(.theater, .outro) *,
-  :is(.theater, .outro) *::before,
-  :is(.theater, .outro) *::after {
+  :is(.theater, .outro, .showcase) *,
+  :is(.theater, .outro, .showcase) *::before,
+  :is(.theater, .outro, .showcase) *::after {
     animation: none !important;
     transition: none !important;
   }

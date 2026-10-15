@@ -2,6 +2,7 @@
 
 import { ChevronDown, ChevronUp } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -11,11 +12,17 @@ import {
 } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
 import { PixelMatrix, type FieldRect } from "@/components/pixel-matrix";
-import type { Project, ProjectCatalog } from "@/lib/projects";
+import type { ProjectCatalog } from "@/lib/projects";
 import { projectsChapter } from "@/lib/site-content";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
 import type { CrtRenderer, TheaterLayout } from "./crt-renderer";
-import { ProjectDialog, recoverArtwork } from "./project-dialog";
+import {
+  placeholderArtwork,
+  ProjectShowcase,
+  recoverArtwork,
+  type ShowcaseEntry,
+  type ShowcasePhase,
+} from "./project-showcase";
 import { ScrambleText } from "./scramble-text";
 
 // Scroll budget, in viewport heights: approaching the monitor, one channel per
@@ -44,6 +51,46 @@ function matrixColor(accent: string) {
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
+const wait = (milliseconds: number) =>
+  new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+const nextFrame = () =>
+  new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve)),
+  );
+
+// Loads and decodes a picture so it is on screen the frame it is shown.
+const decodeImage = (src: string) => {
+  const image = new Image();
+  image.src = src;
+  return image.decode().catch(() => undefined);
+};
+
+// URL search parameter naming the project shown full screen.
+const projectParam = "projet";
+// Matches the showcase's closing transitions (see globals.css).
+const closeDuration = 700;
+
+// Freezes the page behind the showcase. The browser must not restore an older
+// scroll position when its history entry is popped: the monitor stays on the
+// channel of the last project shown.
+const lockPage = () => {
+  document.body.style.overflow = "hidden";
+  window.history.scrollRestoration = "manual";
+};
+
+const unlockPage = () => {
+  document.body.style.overflow = "";
+  window.history.scrollRestoration = "auto";
+};
+
+type Showcase = {
+  index: number;
+  phase: ShowcasePhase;
+  entry: ShowcaseEntry;
+  enterScale: number;
+};
+
 export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
   const { projects, source } = catalog;
   const sectionRef = useRef<HTMLElement>(null);
@@ -56,9 +103,24 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
   const [powered, setPowered] = useState(false);
   const [layout, setLayout] = useState<TheaterLayout>("side");
   const [webgl, setWebgl] = useState<"pending" | "ready" | "failed">("pending");
-  const [detail, setDetail] = useState<Project | null>(null);
+  const [showcase, setShowcase] = useState<Showcase | null>(null);
+  // True from the moment the camera starts diving until it is back out.
+  const [dived, setDived] = useState(false);
+  const showcaseRef = useRef<Showcase | null>(null);
+  const transitionRef = useRef(0);
+  const pushedRef = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const project = projects[active];
   const count = projects.length;
+
+  // The ref answers synchronously for the transitions; state renders.
+  const updateShowcase = useCallback(
+    (update: (current: Showcase | null) => Showcase | null) => {
+      showcaseRef.current = update(showcaseRef.current);
+      setShowcase(showcaseRef.current);
+    },
+    [],
+  );
 
   const screenProject = useMemo(
     () =>
@@ -181,18 +243,166 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     }
   });
 
-  const scrollToProject = (index: number) => {
-    const section = sectionRef.current;
-    if (!section) return;
-    const top =
-      section.getBoundingClientRect().top +
-      window.scrollY +
-      (INTRO + clamp(index, 0, count - 1) + 0.35) * window.innerHeight;
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    window.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
-  };
+  const scrollToProject = useCallback(
+    (index: number, instant = false) => {
+      const section = sectionRef.current;
+      if (!section) return;
+      const top =
+        section.getBoundingClientRect().top +
+        window.scrollY +
+        (INTRO + clamp(index, 0, count - 1) + 0.35) * window.innerHeight;
+      const reduced = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      window.scrollTo({
+        top,
+        behavior: instant || reduced ? "auto" : "smooth",
+      });
+    },
+    [count],
+  );
+
+  // Dives into the monitor, then hands over to the full-screen showcase,
+  // whose picture is laid out exactly as the glass shows it.
+  const openShowcase = useCallback(
+    async (index: number, push = true) => {
+      if (showcaseRef.current) return;
+      const target = projects[index];
+      if (!target) return;
+      const token = ++transitionRef.current;
+      if (push) {
+        const url = new URL(window.location.href);
+        url.searchParams.set(projectParam, target.slug);
+        window.history.pushState(window.history.state, "", url);
+      }
+      pushedRef.current = push;
+      lockPage();
+      setDived(true);
+      updateShowcase(() => ({
+        index,
+        phase: "entering",
+        entry: "dive",
+        enterScale: 1,
+      }));
+
+      const image = target.imageUrl ?? placeholderArtwork;
+      const renderer = rendererRef.current;
+      const [enterScale] = await Promise.all([
+        renderer ? renderer.diveIn(image) : 1,
+        decodeImage(image),
+      ]);
+      if (token !== transitionRef.current) return;
+      updateShowcase((current) => current && { ...current, enterScale });
+      await nextFrame();
+      if (token !== transitionRef.current) return;
+      updateShowcase((current) => current && { ...current, phase: "open" });
+      // Nothing of the scene shows once the showcase has faded in.
+      await wait(400);
+      if (token === transitionRef.current) renderer?.setHeld(true);
+    },
+    [projects, updateShowcase],
+  );
+
+  const closeShowcase = useCallback(async () => {
+    if (!showcaseRef.current || showcaseRef.current.phase === "closing") return;
+    const token = ++transitionRef.current;
+    const renderer = rendererRef.current;
+    const { index } = showcaseRef.current;
+    // The glass, still filling the screen, shows through as the page fades.
+    renderer?.setHeld(false);
+    updateShowcase((current) => current && { ...current, phase: "closing" });
+    await wait(closeDuration);
+    if (token !== transitionRef.current) return;
+    updateShowcase(() => null);
+    unlockPage();
+    if (activeRef.current !== index) scrollToProject(index, true);
+    const out = renderer?.diveOut();
+    // The text returns while the camera is still pulling back.
+    await wait(renderer ? 900 : 0);
+    if (token !== transitionRef.current) return;
+    setDived(false);
+    // Focus returns to the button once it is visible again.
+    await nextFrame();
+    triggerRef.current?.focus({ preventScroll: true });
+    await out;
+  }, [scrollToProject, updateShowcase]);
+
+  // The close button, Escape and the browser's back button all lead here.
+  const requestClose = useCallback(() => {
+    if (pushedRef.current) {
+      pushedRef.current = false;
+      window.history.back();
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete(projectParam);
+    window.history.replaceState(window.history.state, "", url);
+    void closeShowcase();
+  }, [closeShowcase]);
+
+  const showNext = useCallback(() => {
+    const current = showcaseRef.current;
+    if (!current || current.phase !== "open") return;
+    const index = (current.index + 1) % count;
+    const url = new URL(window.location.href);
+    url.searchParams.set(projectParam, projects[index].slug);
+    window.history.replaceState(window.history.state, "", url);
+    updateShowcase(() => ({
+      index,
+      phase: "open",
+      entry: "fade",
+      enterScale: 1,
+    }));
+    // Behind the showcase, tune the monitor to the same channel.
+    scrollToProject(index, true);
+    void rendererRef.current?.setFocusImage(
+      projects[index].imageUrl ?? placeholderArtwork,
+    );
+  }, [count, projects, scrollToProject, updateShowcase]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const slug = new URLSearchParams(window.location.search).get(
+        projectParam,
+      );
+      const index = projects.findIndex((item) => item.slug === slug);
+      if (index === -1) {
+        pushedRef.current = false;
+        void closeShowcase();
+      } else if (!showcaseRef.current) {
+        scrollToProject(index, true);
+        void openShowcase(index, false);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [closeShowcase, openShowcase, projects, scrollToProject]);
+
+  // A shared link opens its project straight away, on its channel.
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get(projectParam);
+    const index = projects.findIndex((item) => item.slug === slug);
+    if (index === -1) return;
+    scrollToProject(index, true);
+    lockPage();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the URL once, after hydration
+    setDived(true);
+    updateShowcase(() => ({
+      index,
+      phase: "open",
+      entry: "fade",
+      enterScale: 1,
+    }));
+    // Mount only: later URL changes go through popstate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (showcaseRef.current) unlockPage();
+    },
+    [],
+  );
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -228,6 +438,7 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
       aria-labelledby="projects-heading"
       data-powered={powered}
       data-webgl={webgl}
+      data-dived={dived || undefined}
       style={
         {
           "--steps": INTRO + count + OUTRO,
@@ -324,8 +535,9 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
             ))}
           </ul>
           <button
+            ref={triggerRef}
             className="pixel-button pixel-button-dark"
-            onClick={() => setDetail(project)}
+            onClick={() => void openShowcase(active)}
           >
             Découvrir le projet
             <PixelArrow />
@@ -370,11 +582,18 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
         </p>
       </div>
 
-      {detail && (
-        <ProjectDialog
-          project={detail}
+      {showcase && (
+        <ProjectShowcase
+          project={projects[showcase.index]}
+          index={showcase.index}
+          count={count}
+          next={count > 1 ? projects[(showcase.index + 1) % count] : null}
           isDemo={source === "demo"}
-          onClose={() => setDetail(null)}
+          phase={showcase.phase}
+          entry={showcase.entry}
+          enterScale={showcase.enterScale}
+          onClose={requestClose}
+          onNext={showNext}
         />
       )}
     </section>

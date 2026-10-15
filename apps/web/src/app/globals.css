@@ -1350,6 +1350,15 @@ body {
   letter-spacing: 0.06em;
 }
 
+.outro-credits a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+.outro-credits a:hover {
+  color: var(--phosphor);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .outro-content > * {
     --o: clamp(0, calc((var(--reveal) - 0.25) * 4), 1);

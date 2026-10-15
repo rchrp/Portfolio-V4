@@ -107,6 +107,11 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
           reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
         });
+        await renderer.load("/models/computer-terminal.glb");
+        if (disposed) {
+          renderer.dispose();
+          return;
+        }
         rendererRef.current = renderer;
         resizeObserver = new ResizeObserver(([entry]) =>
           renderer?.resize(entry.contentRect.width, entry.contentRect.height),
@@ -118,6 +123,8 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
         intersectionObserver.observe(sticky);
         setWebgl("ready");
       } catch {
+        renderer?.dispose();
+        renderer = null;
         if (!disposed) setWebgl("failed");
       }
     };

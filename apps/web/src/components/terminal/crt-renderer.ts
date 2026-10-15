@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 import { ScreenComposer, type ScreenProject } from "./screen-composer";
 
@@ -49,7 +49,7 @@ const screenFragment = /* glsl */ `
   void main() {
     vec2 centered = vUv * 2.0 - 1.0;
     // Fit the picture inside the bezel, then bulge it like curved glass.
-    vec2 curved = centered * 1.02;
+    vec2 curved = centered * 1.07;
     curved *= 1.0 + 0.055 * dot(curved, curved);
     vec2 uv = curved * 0.5 + 0.5;
 
@@ -102,27 +102,6 @@ const screenFragment = /* glsl */ `
   }
 `;
 
-function roundedRectShape(
-  width: number,
-  height: number,
-  radius: number,
-  offsetY = 0,
-) {
-  const shape = new THREE.Shape();
-  const x = -width / 2;
-  const y = -height / 2 + offsetY;
-  shape.moveTo(x + radius, y);
-  shape.lineTo(x + width - radius, y);
-  shape.quadraticCurveTo(x + width, y, x + width, y + radius);
-  shape.lineTo(x + width, y + height - radius);
-  shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  shape.lineTo(x + radius, y + height);
-  shape.quadraticCurveTo(x, y + height, x, y + height - radius);
-  shape.lineTo(x, y + radius);
-  shape.quadraticCurveTo(x, y, x + radius, y);
-  return shape;
-}
-
 function radialTexture(inner: string, outer: string, size = 256) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -143,22 +122,6 @@ function radialTexture(inner: string, outer: string, size = 256) {
   return new THREE.CanvasTexture(canvas);
 }
 
-function labelTexture(font: string) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 96;
-  const context = canvas.getContext("2d")!;
-  context.fillStyle = "#f15a24";
-  context.fillRect(8, 30, 36, 36);
-  context.fillStyle = "#8f8676";
-  context.font = `600 46px ${font}`;
-  context.textBaseline = "middle";
-  context.fillText("RC—84", 64, 50);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
 const damp = (current: number, target: number, lambda: number, delta: number) =>
   THREE.MathUtils.lerp(current, target, 1 - Math.exp(-lambda * delta));
 
@@ -176,8 +139,9 @@ export class CrtRenderer {
     THREE.PlaneGeometry,
     THREE.MeshBasicMaterial
   >;
-  private readonly led: THREE.MeshStandardMaterial;
-  private readonly lookTarget = new THREE.Vector3(0, 0.62, 0.2);
+  private ledMaterial: THREE.MeshStandardMaterial | null = null;
+  private model: THREE.Object3D | null = null;
+  private readonly lookTarget = new THREE.Vector3(0, 0.5, 0.15);
   private readonly cameraPosition = new THREE.Vector3(-0.9, 2.6, 8.5);
   private readonly cameraTarget = new THREE.Vector3();
   private readonly lightColor = new THREE.Color(1, 1, 1);
@@ -245,14 +209,9 @@ export class CrtRenderer {
       toneMapped: false,
     });
 
-    this.screenLight = new THREE.RectAreaLight(0xffffff, 0, 1.06, 0.78);
-    this.led = new THREE.MeshStandardMaterial({
-      color: 0x2a1a12,
-      emissive: 0xf15a24,
-      emissiveIntensity: 0,
-    });
+    this.screenLight = new THREE.RectAreaLight(0xffffff, 0, 1, 1);
     this.glow = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.3, 1.9),
+      new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({
         map: radialTexture("rgba(255,255,255,0.9)", "rgba(255,255,255,0)"),
         transparent: true,
@@ -263,181 +222,75 @@ export class CrtRenderer {
       }),
     );
 
-    this.buildScene(options.sans);
-    this.disposables.push(this.screenTexture, this.screenMaterial, this.led);
-  }
-
-  private buildScene(labelFont: string) {
-    const plastic = new THREE.MeshPhysicalMaterial({
-      color: 0xd8cfbe,
-      roughness: 0.52,
-      clearcoat: 0.25,
-      clearcoatRoughness: 0.6,
-    });
-    const plasticBack = new THREE.MeshPhysicalMaterial({
-      color: 0xcfc5b2,
-      roughness: 0.6,
-      flatShading: true,
-    });
-    const darkPlastic = new THREE.MeshStandardMaterial({
-      color: 0x1b1916,
-      roughness: 0.7,
-    });
-    const keyMaterial = new THREE.MeshStandardMaterial({
-      color: 0xe3dbcc,
-      roughness: 0.45,
-    });
-    this.disposables.push(plastic, plasticBack, darkPlastic, keyMaterial);
-
-    const monitor = new THREE.Group();
-    this.scene.add(monitor);
-
-    // Front shell: a rounded slab with a rectangular tunnel for the tube.
-    const housingDepth = 0.32;
-    const shell = roundedRectShape(1.5, 1.3, 0.1);
-    shell.holes.push(roundedRectShape(1.14, 0.86, 0.05, 0.08));
-    const housingGeometry = new THREE.ExtrudeGeometry(shell, {
-      depth: housingDepth,
-      bevelEnabled: true,
-      bevelThickness: 0.035,
-      bevelSize: 0.03,
-      bevelSegments: 5,
-      curveSegments: 16,
-    });
-    housingGeometry.translate(0, 0, -housingDepth);
-    const housing = new THREE.Mesh(housingGeometry, plastic);
-    housing.position.y = 0.76;
-    housing.castShadow = true;
-    housing.receiveShadow = true;
-    monitor.add(housing);
-
-    // Tapered tube enclosure behind the shell.
-    const backGeometry = new THREE.CylinderGeometry(0.36, 0.74, 0.78, 4, 1);
-    backGeometry.rotateY(Math.PI / 4);
-    backGeometry.rotateX(-Math.PI / 2);
-    backGeometry.scale(1.3, 1.05, 1);
-    backGeometry.translate(0, -0.03, -housingDepth - 0.39);
-    const back = new THREE.Mesh(backGeometry, plasticBack);
-    back.position.y = 0.76;
-    back.castShadow = true;
-    monitor.add(back);
-
-    // Curved glass of the tube.
-    const screenGeometry = new THREE.PlaneGeometry(1.16, 0.88, 48, 36);
-    const positions = screenGeometry.attributes.position;
-    for (let index = 0; index < positions.count; index += 1) {
-      const x = positions.getX(index) / 0.58;
-      const y = positions.getY(index) / 0.44;
-      positions.setZ(index, 0.06 * (1 - x * x * 0.55) * (1 - y * y * 0.55));
-    }
-    screenGeometry.computeVertexNormals();
-    const screen = new THREE.Mesh(screenGeometry, this.screenMaterial);
-    screen.position.set(0, 0.84, -0.13);
-    monitor.add(screen);
-    this.disposables.push(housingGeometry, backGeometry, screenGeometry);
-
-    this.screenLight.position.set(0, 0.84, 0.02);
-    this.screenLight.lookAt(0, 0.84, 5);
-    monitor.add(this.screenLight);
-
-    this.glow.position.set(0, 0.84, 0.06);
-    monitor.add(this.glow);
+    this.buildStage();
     this.disposables.push(
+      this.screenTexture,
+      this.screenMaterial,
       this.glow.geometry,
       this.glow.material,
       this.glow.material.map!,
     );
+  }
 
-    // Chin details: badge, floppy slot and power LED.
-    const badgeTexture = labelTexture(labelFont);
-    const badge = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.26, 0.049),
-      new THREE.MeshStandardMaterial({
-        map: badgeTexture,
-        transparent: true,
-        roughness: 0.6,
-      }),
-    );
-    badge.position.set(-0.48, 0.3, 0.037);
-    monitor.add(badge);
-    const slot = new THREE.Mesh(
-      new RoundedBoxGeometry(0.38, 0.034, 0.02, 2, 0.008),
-      darkPlastic,
-    );
-    slot.position.set(0.34, 0.3, 0.03);
-    monitor.add(slot);
-    const led = new THREE.Mesh(
-      new THREE.BoxGeometry(0.03, 0.012, 0.01),
-      this.led,
-    );
-    led.position.set(0.6, 0.22, 0.036);
-    monitor.add(led);
-    this.disposables.push(
-      badge.geometry,
-      badge.material as THREE.Material,
-      badgeTexture,
-      slot.geometry,
-      led.geometry,
-    );
+  /**
+   * Loads the monitor: "Computer Terminal" by Chris Sweetwood (CC BY-SA 4.0),
+   * prepared by `scripts/build-model.mjs`, whose "Screen" primitive is the
+   * curved glass the CRT shader draws on.
+   */
+  async load(url: string) {
+    const { scene: model } = await new GLTFLoader().loadAsync(url);
+    let glass: THREE.Mesh | null = null;
 
-    const stand = new THREE.Mesh(
-      new RoundedBoxGeometry(1.0, 0.1, 0.95, 3, 0.03),
-      plastic,
-    );
-    stand.position.set(0, 0.05, -0.38);
-    stand.castShadow = true;
-    stand.receiveShadow = true;
-    monitor.add(stand);
-    this.disposables.push(stand.geometry);
-
-    // Keyboard: one base and instanced keycaps.
-    const keyboard = new THREE.Group();
-    keyboard.position.set(0, 0, 0.98);
-    keyboard.rotation.x = 0.045;
-    this.scene.add(keyboard);
-    const keyboardBase = new THREE.Mesh(
-      new RoundedBoxGeometry(1.34, 0.06, 0.46, 3, 0.02),
-      plastic,
-    );
-    keyboardBase.position.y = 0.03;
-    keyboardBase.castShadow = true;
-    keyboardBase.receiveShadow = true;
-    keyboard.add(keyboardBase);
-    const keyGeometry = new RoundedBoxGeometry(0.066, 0.032, 0.066, 2, 0.012);
-    const columns = 15;
-    const rows = 4;
-    const keys = new THREE.InstancedMesh(
-      keyGeometry,
-      keyMaterial,
-      columns * rows,
-    );
-    const matrix = new THREE.Matrix4();
-    for (let row = 0; row < rows; row += 1) {
-      for (let column = 0; column < columns; column += 1) {
-        matrix.makeTranslation(
-          -0.56 + column * 0.08 + (row % 2) * 0.02,
-          0.072,
-          -0.16 + row * 0.08,
-        );
-        keys.setMatrixAt(row * columns + column, matrix);
+    model.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const material = object.material as THREE.MeshStandardMaterial;
+      if (material.name === "Screen") {
+        material.dispose();
+        object.material = this.screenMaterial;
+        glass = object;
+        return;
       }
-    }
-    keys.castShadow = true;
-    keys.receiveShadow = true;
-    keyboard.add(keys);
-    const spacebar = new THREE.Mesh(
-      new RoundedBoxGeometry(0.5, 0.032, 0.066, 2, 0.012),
-      keyMaterial,
+      object.castShadow = true;
+      object.receiveShadow = true;
+      // The emissive map only holds the power LED.
+      if (material.emissiveMap) {
+        material.emissiveIntensity = 0;
+        this.ledMaterial = material;
+      }
+    });
+    if (!glass) throw new Error("The model has no screen glass.");
+
+    // Rest the model on the desk, centred on the origin.
+    const bounds = new THREE.Box3().setFromObject(model);
+    const center = bounds.getCenter(new THREE.Vector3());
+    model.position.set(-center.x, -bounds.min.y, -center.z);
+    model.updateMatrixWorld(true);
+    this.scene.add(model);
+    this.model = model;
+
+    const glassBounds = new THREE.Box3().setFromObject(glass);
+    const glassCenter = glassBounds.getCenter(new THREE.Vector3());
+    const glassSize = glassBounds.getSize(new THREE.Vector3());
+    this.screenLight.width = glassSize.x;
+    this.screenLight.height = glassSize.y;
+    this.screenLight.position.set(
+      glassCenter.x,
+      glassCenter.y,
+      glassBounds.max.z + 0.01,
     );
-    spacebar.position.set(0, 0.072, 0.16);
-    spacebar.castShadow = true;
-    keyboard.add(spacebar);
-    this.disposables.push(
-      keyboardBase.geometry,
-      keyGeometry,
-      spacebar.geometry,
-      keys,
+    this.screenLight.lookAt(glassCenter.x, glassCenter.y, 10);
+    this.glow.position.set(
+      glassCenter.x,
+      glassCenter.y,
+      glassBounds.max.z + 0.14,
     );
+    this.glow.scale.set(glassSize.x * 2.4, glassSize.y * 2.6, 1);
+    this.lookTarget.set(0, (bounds.max.y - bounds.min.y) * 0.46, 0.12);
+    this.wake();
+  }
+
+  private buildStage() {
+    this.scene.add(this.screenLight, this.glow);
 
     // Desk that fades into the matrix wall behind the canvas.
     const deskAlpha = radialTexture("#ffffff", "#000000", 512);
@@ -546,6 +399,22 @@ export class CrtRenderer {
   dispose() {
     this.setActive(false);
     for (const item of this.disposables) item.dispose();
+    this.model?.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      object.geometry.dispose();
+      if (object.material === this.screenMaterial) return;
+      const material = object.material as THREE.MeshStandardMaterial;
+      for (const texture of [
+        material.map,
+        material.normalMap,
+        material.roughnessMap,
+        material.metalnessMap,
+        material.aoMap,
+        material.emissiveMap,
+      ])
+        texture?.dispose();
+      material.dispose();
+    });
     this.scene.environment?.dispose();
     this.renderer.dispose();
   }
@@ -597,12 +466,12 @@ export class CrtRenderer {
       Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) *
       this.camera.aspect;
     const distance =
-      this.layout === "stacked" ? Math.max(6.6, 1.12 / halfWidth) : 5.65;
+      this.layout === "stacked" ? Math.max(4.4, 1.02 / halfWidth) : 5.8;
     this.cameraTarget.set(
       THREE.MathUtils.lerp(-1.4, sway, approach) + leave * 0.6,
       THREE.MathUtils.lerp(
         2.9,
-        1.55 + Math.cos(project * 0.9) * 0.08,
+        1.45 + Math.cos(project * 0.9) * 0.08,
         approach,
       ) +
         leave * 1.1,
@@ -682,7 +551,8 @@ export class CrtRenderer {
     this.screenLight.intensity = lit * 7 * flicker;
     this.glow.material.color.copy(this.lightColor);
     this.glow.material.opacity = lit * 0.075 * flicker;
-    this.led.emissiveIntensity = THREE.MathUtils.lerp(0.4, 2.6, lit);
+    if (this.ledMaterial)
+      this.ledMaterial.emissiveIntensity = THREE.MathUtils.lerp(0.15, 3, lit);
 
     const uniforms = this.screenMaterial.uniforms;
     uniforms.uTime.value = now / 1000;

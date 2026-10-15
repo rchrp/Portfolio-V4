@@ -17,7 +17,8 @@ type Mode =
   | { kind: "boot"; startedAt: number; total: number }
   | { kind: "project"; startedAt: number; project: ScreenProject };
 
-export const SCREEN_WIDTH = 1024;
+// 3:2, the proportions of the model's glass.
+export const SCREEN_WIDTH = 1152;
 export const SCREEN_HEIGHT = 768;
 
 const phosphor = "#ece8da";
@@ -26,6 +27,7 @@ const background = "#0b0c0b";
 const brand = "#f15a24";
 const bootDuration = 1900;
 const zoomDuration = 320;
+const bootLeft = SCREEN_WIDTH / 2 - 190;
 const loadDuration = 620;
 const typeDuration = 520;
 
@@ -240,19 +242,19 @@ export class ScreenComposer {
       const y = 482 + index * 30;
       context.textAlign = "left";
       context.fillStyle = dim;
-      context.fillText(`${label} `.padEnd(30, "."), 322, y);
+      context.fillText(`${label} `.padEnd(30, "."), bootLeft, y);
       context.textAlign = "right";
       context.fillStyle = appear > 160 ? phosphor : dim;
-      context.fillText(appear > 160 ? value : "…", 702, y);
+      context.fillText(appear > 160 ? value : "…", bootLeft + 380, y);
     });
 
     const barY = 600;
     context.strokeStyle = dim;
     context.lineWidth = 2;
-    context.strokeRect(322, barY, 380, 16);
+    context.strokeRect(bootLeft, barY, 380, 16);
     context.fillStyle = phosphor;
     const filled = easeOut(clamp01((elapsed - 300) / (bootDuration - 500)));
-    context.fillRect(326, barY + 4, 372 * filled, 8);
+    context.fillRect(bootLeft + 4, barY + 4, 372 * filled, 8);
   }
 
   private drawProject(
@@ -266,7 +268,7 @@ export class ScreenComposer {
     context.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     this.drawMenuBar(counter);
 
-    const frame = { x: 70, y: 74, width: 884, height: 590 };
+    const frame = { x: 70, y: 74, width: SCREEN_WIDTH - 140, height: 590 };
     const zoom = easeOut(clamp01(elapsed / zoomDuration));
 
     // Classic "zoom rects" while the window opens.

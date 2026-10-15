@@ -42,8 +42,8 @@ const DURATION = 3150;
 /** Skip the intro if its textures take longer than this to arrive. */
 const LOAD_BUDGET = 2200;
 const MAX_DEPTH = SPLIT_SPREAD.length;
-/** How far the pointer pulls the eroded edges, in CSS pixels. */
-const MAGNET_RADIUS = 300;
+/** Distance over which edges are drawn to the pointer, in CSS pixels. */
+const MAGNET_RADIUS = 420;
 
 const glslFloat = (value: number) => value.toFixed(1);
 
@@ -150,33 +150,47 @@ float matrixFade(float y) {
   return 1.0;
 }
 
-// The silhouette's edges dissolve into the hero matrix: the eroded band is
-// anchored on the contour and reaches further in towards the pointer.
+// Depth inside the silhouette from its blurred alpha: 0.5 on the contour,
+// rising towards 1 deep inside.
+float silhouetteDepth(vec2 center) {
+  return 0.5 * (
+    sampleArea(uPhoto, center, uCell, 2.5).a +
+    sampleArea(uPhoto, center, uCell, 3.5).a
+  );
+}
+
+// The silhouette's edges dissolve into the hero matrix, on the lower half
+// of the portrait only. The deeper the pointer goes into the silhouette,
+// the further the matrix eats in from the contour — more on the side of the
+// pointer, as if drawn to it — without ever reaching the middle.
 // Cells sit on the matrix grid; at the front they are pixels of the photo,
 // behind it they become the matrix's own orange cells.
 vec4 nibbledEdges(vec2 pixel, vec4 direct) {
-  if (distance(pixel, uPointer) > uRadius + uCell) return vec4(0.0);
-
   vec2 id = floor((pixel - uOrigin) / uCell + 0.5);
   vec2 center = uOrigin + id * uCell;
-  float pull = 1.0 - smoothstep(0.0, uRadius, distance(center, uPointer));
-  pull *= pull * uStrength;
-  if (pull <= 0.001) return vec4(0.0);
+
+  // Fades in from the middle of the image down; the head stays intact.
+  float row = (center.y - uImageRect.y) / uImageRect.w;
+  float lower = smoothstep(0.5, 0.75, row);
+  if (lower <= 0.0) return vec4(0.0);
 
   vec4 photo = sampleArea(uPhoto, center, uCell, 0.0);
   if (photo.a < 0.04) return vec4(0.0);
 
-  // Depth inside the silhouette from its blurred alpha: 0.5 on the contour.
-  float depth = 0.5 * (
-    sampleArea(uPhoto, center, uCell, 2.0).a +
-    sampleArea(uPhoto, center, uCell, 3.0).a
-  );
+  // How far the pointer is inside the silhouette drives the whole effect.
+  float reach = mix(0.12, 1.0, smoothstep(0.5, 0.95, silhouetteDepth(uPointer)));
+  float attraction = mix(0.45, 1.0, 1.0 - smoothstep(0.0, uRadius, distance(center, uPointer)));
+  float pull = reach * attraction * lower * uStrength;
+  if (pull <= 0.001) return vec4(0.0);
+
+  float depth = silhouetteDepth(center);
   // Ragged front: slow drifting noise plus per-cell scatter, so neighbors
-  // along the edge are not eaten at the same time.
+  // along the edge are not eaten at the same time. Capped below 1: the
+  // middle of the silhouette is never reached.
   float drift = valueNoise(id * 0.3 + uTime * 0.0004) - 0.5;
   float scatter = hash(id) - 0.5;
-  float front = 0.5 + pull * (0.3 + drift * 0.3 + scatter * 0.2);
-  float eaten = smoothstep(0.0, 0.16, front - depth);
+  float front = 0.5 + pull * (0.42 + drift * 0.2 + scatter * 0.14);
+  float eaten = smoothstep(0.0, 0.14, front - depth);
   if (eaten <= 0.0) return vec4(0.0);
 
   // Matrix cell, as the background draws it near the pointer.
@@ -640,10 +654,10 @@ export function PortraitReveal({
         if (event.pointerType !== "mouse") return;
         pointer.clientX = event.clientX;
         pointer.clientY = event.clientY;
-        // Active over the photo and a margin around it, so the edges start
-        // reaching out as the pointer comes near.
+        // Active over the photo, with a small margin so the edges already
+        // stir as the pointer comes in.
         const [x, y, width, height] = layout.imageRect;
-        const margin = MAGNET_RADIUS * 0.6 * pixelRatio;
+        const margin = 40 * pixelRatio;
         const localX = (event.clientX - layout.left) * pixelRatio;
         const localY = (event.clientY - layout.top) * pixelRatio;
         const inside =

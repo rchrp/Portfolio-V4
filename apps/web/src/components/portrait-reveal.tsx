@@ -40,6 +40,8 @@ const DURATION = 3150;
 /** Skip the intro if its textures take longer than this to arrive. */
 const LOAD_BUDGET = 2200;
 const MAX_DEPTH = SPLIT_SPREAD.length;
+/** Radius of the hover area, in CSS pixels. */
+const HOVER_RADIUS = 150;
 
 const glslFloat = (value: number) => value.toFixed(1);
 
@@ -64,6 +66,11 @@ uniform float uTint;
 uniform float uSquare;
 uniform float uSharp;
 uniform vec3 uAccent;
+// Hover mode: around the pointer, the photo turns back into matrix cells.
+uniform int uMode;
+uniform vec2 uPointer;
+uniform float uRadius;
+uniform float uStrength;
 out vec4 fragColor;
 
 const float SPLIT_START = ${glslFloat(SPLIT_START)};
@@ -118,6 +125,41 @@ float presence(float level) {
   return smoothstep(0.02, 0.08, level);
 }
 
+// Same quadtree, driven by distance instead of time: cells stay coarse near
+// the pointer and refine outwards, with jittered thresholds for an organic
+// boundary, down to the photo itself at the edge of the area.
+vec4 hoverCells(vec2 pixel, vec4 direct) {
+  float area = (1.0 - smoothstep(uRadius * 0.6, uRadius, distance(pixel, uPointer))) * uStrength;
+  if (area <= 0.002) return vec4(0.0);
+
+  vec2 id = floor((pixel - uOrigin) / uCell + 0.5);
+  vec2 center = uOrigin + id * uCell;
+  float size = uCell;
+  float influence = 0.0;
+  int depth = 0;
+  for (; depth < ${MAX_DEPTH}; depth++) {
+    if (depth >= uDepth) break;
+    influence = (1.0 - smoothstep(0.0, uRadius, distance(center, uPointer))) * uStrength;
+    float jitter = (hash(id + vec2(float(depth) * 17.3, 3.1)) - 0.5) * 0.2;
+    float threshold = 1.0 - float(depth + 1) / (float(uDepth) + 0.5) + jitter;
+    if (influence > threshold) break;
+    vec2 quadrant = step(center, pixel);
+    size *= 0.5;
+    center += (quadrant - 0.5) * size;
+    id = id * 2.0 + quadrant;
+  }
+  // Finest level: the photo as it is, so the area blends into the image.
+  if (depth >= uDepth) return vec4(0.0);
+
+  vec4 photo = sampleArea(uPhoto, center, size, 0.0);
+  vec3 color = mix(photo.rgb, uAccent, influence * influence * 0.5);
+  float gap = mix(0.9, 0.8, influence);
+  vec4 cell = square(pixel, center, size * 0.5 * gap * photo.a, color, presence(photo.a));
+  // The page shows between the cells, over the silhouette only.
+  vec4 page = vec4(vec3(direct.a), direct.a);
+  return (cell + page * (1.0 - cell.a)) * area;
+}
+
 void main() {
   vec2 pixel = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
 
@@ -127,6 +169,12 @@ void main() {
   if (all(greaterThanEqual(pixelUv, vec2(0.0))) && all(lessThanEqual(pixelUv, vec2(1.0)))) {
     vec4 texel = texture(uPhoto, pixelUv);
     direct = vec4(texel.rgb * texel.a, texel.a);
+  }
+
+  if (uMode == 1) {
+    fragColor = hoverCells(pixel, direct);
+    if (fragColor.a <= 0.001) discard;
+    return;
   }
 
   vec2 id = floor((pixel - uOrigin) / uCell + 0.5);
@@ -341,6 +389,10 @@ export function PortraitReveal({
         tint: uniform("uTint"),
         square: uniform("uSquare"),
         sharp: uniform("uSharp"),
+        mode: uniform("uMode"),
+        pointer: uniform("uPointer"),
+        radius: uniform("uRadius"),
+        strength: uniform("uStrength"),
       };
       context.uniform1i(uniform("uPhoto"), 0);
       context.uniform1i(uniform("uEdges"), 1);
@@ -358,8 +410,16 @@ export function PortraitReveal({
       const startedAt = performance.now();
       host.dataset.intro = "running";
 
-      const render = (now: number) => {
-        const time = now - startedAt;
+      let layout = {
+        width: 1,
+        height: 1,
+        left: 0,
+        top: 0,
+        imageRect: [0, 0, 1, 1],
+      };
+
+      // Sizes the canvas and sets the uniforms shared by both modes.
+      const prepare = () => {
         const bounds = host.getBoundingClientRect();
         const width = Math.max(1, Math.round(bounds.width * pixelRatio));
         const height = Math.max(1, Math.round(bounds.height * pixelRatio));
@@ -401,16 +461,29 @@ export function PortraitReveal({
           MAX_DEPTH,
           Math.max(1, Math.floor(Math.log2(cell))),
         );
+        const imageRect = [
+          (width - imageWidth) * alignX,
+          (height - imageHeight) * alignY,
+          imageWidth,
+          imageHeight,
+        ];
+        layout = {
+          width,
+          height,
+          left: bounds.left,
+          top: bounds.top,
+          imageRect,
+        };
 
         context.viewport(0, 0, width, height);
         context.clear(context.COLOR_BUFFER_BIT);
         context.uniform2f(uniforms.resolution, width, height);
         context.uniform4f(
           uniforms.imageRect,
-          (width - imageWidth) * alignX,
-          (height - imageHeight) * alignY,
-          imageWidth,
-          imageHeight,
+          imageRect[0],
+          imageRect[1],
+          imageRect[2],
+          imageRect[3],
         );
         context.uniform2f(
           uniforms.origin,
@@ -419,6 +492,13 @@ export function PortraitReveal({
         );
         context.uniform1f(uniforms.cell, cell);
         context.uniform1i(uniforms.depth, depth);
+      };
+
+      const render = (now: number) => {
+        frame = 0;
+        const time = now - startedAt;
+        prepare();
+        context.uniform1i(uniforms.mode, 0);
         context.uniform1f(uniforms.time, time);
         context.uniform1f(uniforms.edgeReveal, phase(time, ...EDGES));
         context.uniform1f(uniforms.fill, phase(time, ...FILL));
@@ -435,10 +515,107 @@ export function PortraitReveal({
           return;
         }
 
-        // The real image fades in over the last frame, then the canvas goes.
+        // The real image fades in over the last frame, then the canvas is
+        // cleared and only wakes up again under a mouse pointer.
         finish();
-        removal = window.setTimeout(unmount, 700);
+        removal = window.setTimeout(() => {
+          if (
+            !window.matchMedia("(hover: hover) and (pointer: fine)").matches
+          ) {
+            unmount();
+            return;
+          }
+          context.clear(context.COLOR_BUFFER_BIT);
+          enableHover();
+        }, 700);
       };
+
+      // Hover: rendered on demand only, while the pointer is around.
+      const pointer = {
+        clientX: 0,
+        clientY: 0,
+        x: 0,
+        y: 0,
+        strength: 0,
+        target: 0,
+      };
+
+      const hoverFrame = () => {
+        frame = 0;
+        prepare();
+        const targetX = (pointer.clientX - layout.left) * pixelRatio;
+        const targetY = (pointer.clientY - layout.top) * pixelRatio;
+        if (pointer.strength < 0.01) {
+          pointer.x = targetX;
+          pointer.y = targetY;
+        }
+        pointer.x += (targetX - pointer.x) * 0.22;
+        pointer.y += (targetY - pointer.y) * 0.22;
+        pointer.strength +=
+          (pointer.target - pointer.strength) *
+          (pointer.target > pointer.strength ? 0.16 : 0.1);
+
+        if (pointer.target === 0 && pointer.strength < 0.004) {
+          pointer.strength = 0;
+          context.clear(context.COLOR_BUFFER_BIT);
+          return;
+        }
+
+        context.uniform1i(uniforms.mode, 1);
+        context.uniform2f(uniforms.pointer, pointer.x, pointer.y);
+        context.uniform1f(uniforms.radius, HOVER_RADIUS * pixelRatio);
+        context.uniform1f(uniforms.strength, pointer.strength);
+        context.drawArrays(context.TRIANGLES, 0, 3);
+
+        const moving =
+          Math.abs(targetX - pointer.x) + Math.abs(targetY - pointer.y) > 0.3;
+        const fading = Math.abs(pointer.target - pointer.strength) > 0.004;
+        if (moving || fading) frame = requestAnimationFrame(hoverFrame);
+      };
+
+      const wake = () => {
+        if (!frame && !disposed) frame = requestAnimationFrame(hoverFrame);
+      };
+
+      const onPointerMove = (event: PointerEvent) => {
+        if (event.pointerType !== "mouse") return;
+        pointer.clientX = event.clientX;
+        pointer.clientY = event.clientY;
+        // Active over the photo itself, not the whole box around it.
+        const [x, y, width, height] = layout.imageRect;
+        const localX = (event.clientX - layout.left) * pixelRatio;
+        const localY = (event.clientY - layout.top) * pixelRatio;
+        const inside =
+          localX >= x &&
+          localX <= x + width &&
+          localY >= y &&
+          localY <= y + height;
+        pointer.target = inside ? 1 : 0;
+        if (inside || pointer.strength > 0) wake();
+      };
+      const onLeave = () => {
+        pointer.target = 0;
+        wake();
+      };
+
+      const enableHover = () => {
+        if (disposed) return;
+        prepare();
+        context.clear(context.COLOR_BUFFER_BIT);
+        window.addEventListener("pointermove", onPointerMove, {
+          passive: true,
+        });
+        document.documentElement.addEventListener("pointerleave", onLeave);
+        window.addEventListener("blur", onLeave);
+        window.addEventListener("scroll", onLeave, { passive: true });
+        resources.push(() => {
+          window.removeEventListener("pointermove", onPointerMove);
+          document.documentElement.removeEventListener("pointerleave", onLeave);
+          window.removeEventListener("blur", onLeave);
+          window.removeEventListener("scroll", onLeave);
+        });
+      };
+
       frame = requestAnimationFrame(render);
     };
 

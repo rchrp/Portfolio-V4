@@ -18,6 +18,15 @@ const words = manifesto.text.split(/(\*[^*]+\*)/).flatMap((part) =>
         .map((word) => ({ word, accent: false })),
 );
 
+// Pixels floating at three depths behind the statement, spread evenly by a
+// low-discrepancy (R2) sequence: the nearer, the faster they rise (see the
+// parallax rules in globals.css).
+const motes = Array.from({ length: 21 }, (_, index) => ({
+  x: `${(((0.5 + 0.7548776662 * index) % 1) * 100).toFixed(2)}%`,
+  y: `${(((0.5 + 0.569840291 * index) % 1) * 100).toFixed(2)}%`,
+  depth: (index % 3) + 1,
+}));
+
 // Chapter 1: in the dark, the statement lights up word by word.
 export function Manifesto() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -44,6 +53,16 @@ export function Manifesto() {
       style={{ "--n": words.length } as CSSProperties}
     >
       <div className="manifesto-sticky">
+        <div className="manifesto-motes" aria-hidden="true">
+          {motes.map(({ x, y, depth }, index) => (
+            <span
+              key={index}
+              className="manifesto-mote"
+              data-depth={depth}
+              style={{ left: x, top: y }}
+            />
+          ))}
+        </div>
         <h2 id="manifesto-heading" className="manifesto-text">
           <span className="sr-only">{manifesto.text.replaceAll("*", "")}</span>
           <span aria-hidden="true">

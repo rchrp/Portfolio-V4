@@ -799,7 +799,7 @@ body {
 @keyframes hero-title-depart {
   to {
     opacity: 0;
-    transform: translateY(-5svh);
+    transform: translateY(-12svh);
     filter: blur(10px);
   }
 }
@@ -814,7 +814,11 @@ body {
 @keyframes night-glow-drift {
   from {
     opacity: 0.3;
-    transform: translateX(-10%);
+    transform: translate(-10%, -30%);
+  }
+
+  to {
+    transform: translateY(25%);
   }
 }
 
@@ -888,6 +892,7 @@ body {
 .manifesto-sticky {
   position: sticky;
   top: 0;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -895,6 +900,33 @@ body {
   height: 100svh;
   padding: 0 var(--page-gutter);
   overflow: hidden;
+}
+
+/* Behind the statement, a few pixels at three depths (see Parallax). */
+.manifesto-motes {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+}
+
+.manifesto-mote {
+  position: absolute;
+  width: 3px;
+  aspect-ratio: 1;
+  background: var(--phosphor);
+  opacity: 0.18;
+}
+
+.manifesto-mote[data-depth="2"] {
+  width: 5px;
+  opacity: 0.32;
+}
+
+.manifesto-mote[data-depth="3"] {
+  width: 8px;
+  background: var(--accent);
+  opacity: 0.7;
 }
 
 .manifesto-text {
@@ -2396,6 +2428,153 @@ body {
   :is(.theater, .outro, .showcase) *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------------
+   Parallax: while the page scrolls, each layer keeps its own pace — the far
+   ones lag behind, the near ones run ahead.
+   ------------------------------------------------------------------------ */
+
+/* Each layer sets the offsets it travels between. */
+@keyframes parallax {
+  from {
+    translate: 0 var(--parallax-from, 0);
+  }
+
+  to {
+    translate: 0 var(--parallax-to, 0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    /* The hero leaves in layers: the dots stay behind, the portrait sinks
+       into the night, the top line runs ahead (the title departs above). */
+    .hero-matrix {
+      --parallax-to: 30svh;
+      animation:
+        hero-fade-in 1400ms ease 1800ms both,
+        parallax linear both;
+      animation-timeline: auto, --hero-exit;
+      animation-range:
+        normal,
+        exit 0% exit 100%;
+    }
+
+    /* The blur travels with the portrait so its lower edge stays soft. */
+    :is(.hero-portrait, .hero-bottom-blur) {
+      --parallax-to: 14svh;
+      animation: parallax linear both;
+      animation-timeline: --hero-exit;
+      animation-range: exit 0% exit 100%;
+    }
+
+    .hero-topline {
+      --parallax-to: -16svh;
+      animation:
+        hero-meta-enter 850ms var(--hero-ease) 160ms both,
+        parallax linear both;
+      animation-timeline: auto, --hero-exit;
+      animation-range:
+        normal,
+        exit 0% exit 70%;
+    }
+
+    /* The manifesto stays pinned: its layers drift up at their own pace
+       while the words light up. */
+    .manifesto {
+      view-timeline-name: --manifesto;
+    }
+
+    :is(
+      .manifesto-text,
+      .manifesto-disciplines,
+      .manifesto-disciplines .big-index,
+      .manifesto-mote
+    ) {
+      animation: parallax linear both;
+      animation-timeline: --manifesto;
+      animation-range: contain 0% contain 100%;
+    }
+
+    .manifesto-text {
+      --parallax-from: 7svh;
+      --parallax-to: -7svh;
+    }
+
+    .manifesto-disciplines {
+      --parallax-from: 14svh;
+      --parallax-to: -10svh;
+    }
+
+    /* Each numeral floats a little further from its label than the last. */
+    .manifesto-disciplines .big-index {
+      --parallax-from: calc((var(--i) + 1) * 0.2em);
+      --parallax-to: calc((var(--i) + 1) * -0.15em);
+    }
+
+    .manifesto-mote {
+      --parallax-from: 12svh;
+      --parallax-to: -12svh;
+    }
+
+    .manifesto-mote[data-depth="2"] {
+      --parallax-from: 30svh;
+      --parallax-to: -30svh;
+    }
+
+    .manifesto-mote[data-depth="3"] {
+      --parallax-from: 55svh;
+      --parallax-to: -55svh;
+    }
+
+    /* The terminal slides in: the monitor and its wall come from further
+       away than the heading. */
+    .theater {
+      view-timeline-name: --theater;
+    }
+
+    :is(.theater-canvas, .theater-matrix, .theater-header) {
+      animation: parallax linear both;
+      animation-timeline: --theater;
+      animation-range: entry 0% entry 100%;
+    }
+
+    .theater-canvas {
+      --parallax-from: -28svh;
+    }
+
+    .theater-matrix {
+      --parallax-from: -14svh;
+    }
+
+    .theater-header {
+      --parallax-from: 18svh;
+    }
+
+    /* The outro rises over its portrait, one line after the other. */
+    .outro {
+      view-timeline-name: --outro;
+    }
+
+    :is(.outro-matrix, .outro-title span) {
+      animation: parallax linear both;
+      animation-timeline: --outro;
+      animation-range: entry 0% entry 100%;
+    }
+
+    .outro-matrix {
+      --parallax-from: -30svh;
+    }
+
+    .outro-title span {
+      --parallax-from: 8svh;
+    }
+
+    .outro-title span + span {
+      --parallax-from: 16svh;
+    }
   }
 }
 

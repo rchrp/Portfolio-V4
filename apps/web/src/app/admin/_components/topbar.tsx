@@ -13,6 +13,11 @@ const links = [
       path === "/admin" || path.startsWith("/admin/projects"),
   },
   {
+    href: "/admin/journey",
+    label: "Parcours",
+    match: (path: string) => path.startsWith("/admin/journey"),
+  },
+  {
     href: "/admin/security",
     label: "Sécurité",
     match: (path: string) => path.startsWith("/admin/security"),

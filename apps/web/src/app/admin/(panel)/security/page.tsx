@@ -32,6 +32,10 @@ const actionLabels: Record<string, string> = {
   "project.reordered": "Ordre modifié",
   "project.deleted": "Projet supprimé",
   "project.image.uploaded": "Image importée",
+  "journey.created": "Étape de parcours créée",
+  "journey.updated": "Étape de parcours modifiée",
+  "journey.status": "Statut d’étape changé",
+  "journey.deleted": "Étape de parcours supprimée",
 };
 
 export default async function SecurityPage() {

@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { Suspense } from "react";
 import { preload } from "react-dom";
 import portrait from "../../public/portrait_3_white_bg_wider.png";
@@ -65,7 +66,13 @@ export default function Home() {
             </span>
             <span>Freelance</span>
           </p>
-          <p className="hero-edition">Portfolio / 2026</p>
+          <p className="hero-edition">
+            <Link href="/parcours" className="hero-journey-link">
+              Parcours
+            </Link>
+            <span aria-hidden="true">·</span>
+            Portfolio / 2026
+          </p>
         </header>
 
         <div className="hero-heading">

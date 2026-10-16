@@ -1,4 +1,5 @@
 import type {
+  JourneyKind,
   ProjectKind,
   ProjectLinkKind,
   ProjectStatus,
@@ -429,5 +430,208 @@ export const seedProjects: SeedProject[] = [
     imageAlt: "La page d’accueil de Grossify.",
     accentColor: "#2fa46b",
     status: "DRAFT",
+  },
+];
+
+export type SeedJourneyEntry = {
+  slug: string;
+  kind: JourneyKind;
+  title: string;
+  organization: string;
+  location?: string;
+  /** "YYYY-MM" */
+  startedOn: string;
+  /** "YYYY-MM", absent while it goes on. May lie ahead. */
+  endedOn?: string;
+  /** False: the period reads in years only. */
+  showMonths: boolean;
+  summary: string;
+  description?: string;
+  highlights?: string[];
+  technologies?: string[];
+  projectSlugs?: string[];
+  websiteUrl?: string;
+  status: ProjectStatus;
+};
+
+// The /parcours timeline, from the CV and the earlier portfolios. The page
+// orders steps by start date; this list follows the same order.
+export const seedJourney: SeedJourneyEntry[] = [
+  {
+    slug: "premieres-lignes-de-code",
+    kind: "MILESTONE",
+    title: "Premières lignes de code",
+    organization: "Collège",
+    startedOn: "2017-01",
+    endedOn: "2017-12",
+    showMonths: false,
+    summary:
+      "En permanence, je programme ma calculatrice. Créer quelque chose à partir de rien : le déclic.",
+    description:
+      "Vite à l’étroit dans les limites de la calculatrice, je passe au Python et réalise mes premiers projets.",
+    technologies: ["Python"],
+    status: "PUBLISHED",
+  },
+  {
+    slug: "neurastock",
+    kind: "PROJECT",
+    title: "NeuraStock A.I.",
+    organization: "Projet personnel",
+    startedOn: "2020-05",
+    endedOn: "2021-09",
+    showMonths: true,
+    summary:
+      "Avec un ami passionné de finance, une IA d’analyse boursière, bien avant l’explosion de l’IA : ma porte d’entrée vers la finance et le machine learning.",
+    highlights: [
+      "Un modèle Transformer entraîné sur 10 000 cotations boursières.",
+      "La collecte et le nettoyage des données, puis des backtests détaillés.",
+    ],
+    technologies: ["Python", "TensorFlow", "Keras", "PostgreSQL"],
+    projectSlugs: ["neurastock"],
+    status: "PUBLISHED",
+  },
+  {
+    slug: "baccalaureat",
+    kind: "EDUCATION",
+    title: "Baccalauréat général",
+    organization: "Lycée",
+    startedOn: "2020-09",
+    endedOn: "2023-07",
+    showMonths: false,
+    summary: "Spécialités mathématiques, NSI et physique-chimie.",
+    highlights: ["Mention Bien.", "Mention européenne."],
+    status: "PUBLISHED",
+  },
+  {
+    slug: "finalyzing",
+    kind: "PROJECT",
+    title: "Finalyzing",
+    organization: "Projet personnel",
+    startedOn: "2022-07",
+    endedOn: "2024-02",
+    showMonths: true,
+    summary:
+      "Une suite d’outils d’analyse financière en ligne, construite avec peu de moyens : le projet qui m’a le plus appris, et fait de moi un développeur full stack.",
+    highlights: [
+      "Développée en collaboration avec EODHD, fournisseur de données financières.",
+      "Plus de 150 000 actions : analyse fondamentale et technique.",
+      "Les données macroéconomiques de plus de 215 pays.",
+    ],
+    technologies: ["Angular", "Python", "Flask"],
+    projectSlugs: ["finalyzing"],
+    status: "PUBLISHED",
+  },
+  {
+    slug: "epitech",
+    kind: "EDUCATION",
+    title: "Programme Grande École",
+    organization: "Epitech",
+    location: "Lyon",
+    startedOn: "2023-09",
+    endedOn: "2028-06",
+    showMonths: false,
+    summary:
+      "Cinq ans d’informatique par la pratique, vers le diplôme d’Expert en technologies de l’information. Aujourd’hui en 4e année.",
+    description:
+      "Un diplôme visé par le ministère de l’Enseignement supérieur, et le titre d’Expert en ingénierie logicielle (RNCP niveau 7).",
+    highlights: [
+      "Une pédagogie par projets, seul et en équipe.",
+      "De la programmation système en C aux architectures web.",
+    ],
+    technologies: ["C", "C++", "Haskell", "Python", "TypeScript"],
+    projectSlugs: ["minishell"],
+    websiteUrl: "https://www.epitech.eu",
+    status: "PUBLISHED",
+  },
+  {
+    slug: "freelance",
+    kind: "FREELANCE",
+    title: "Développeur full stack freelance",
+    organization: "Indépendant",
+    location: "À distance",
+    startedOn: "2023-09",
+    showMonths: false,
+    summary:
+      "Des produits SaaS et des sites sur mesure, de la conception au déploiement.",
+    highlights: [
+      "Amazon Analyzer : un SaaS et une extension, avec un agent IA pour l’analyse concurrentielle.",
+      "Finvio : une plateforme SaaS de gestion de patrimoine.",
+      "Atelier Sophie Sylvestre : le site vitrine d’une restauratrice de tableaux.",
+    ],
+    technologies: ["Nuxt", "Vue", "AdonisJS", "TypeScript", "MySQL"],
+    projectSlugs: ["amazon-analyzer", "finvio", "atelier-sophie-sylvestre"],
+    status: "PUBLISHED",
+  },
+  {
+    slug: "visiativ-2024",
+    kind: "WORK",
+    title: "Développeur full stack · stage",
+    organization: "Visiativ",
+    location: "Lyon",
+    startedOn: "2024-07",
+    endedOn: "2024-12",
+    showMonths: true,
+    summary:
+      "Six mois sur Visiativ PLM, une solution de gestion du cycle de vie des produits utilisée par des industriels.",
+    highlights: [
+      "L’interface de Visiativ PLM, en Angular et NgRx.",
+      "Des fonctionnalités back-end en Java (Spring, JPA), reliées à la base de données.",
+    ],
+    technologies: ["Angular", "NgRx", "Java", "Spring", "JPA"],
+    websiteUrl: "https://www.visiativ.com",
+    status: "PUBLISHED",
+  },
+  {
+    slug: "visiativ-2025",
+    kind: "WORK",
+    title: "Développeur full stack · stage",
+    organization: "Visiativ",
+    location: "Lyon",
+    startedOn: "2025-11",
+    endedOn: "2026-02",
+    showMonths: true,
+    summary:
+      "Quatre mois de retour sur Visiativ PLM, des maquettes jusqu’aux tests.",
+    highlights: [
+      "Des maquettes Figma traduites en composants réutilisables, avec les équipes UX/UI.",
+      "Des tests unitaires Jest : plus de 80 % de couverture de code.",
+      "Des ateliers de design thinking.",
+    ],
+    technologies: ["Angular", "NgRx", "Java", "Spring", "Jest", "Figma"],
+    websiteUrl: "https://www.visiativ.com",
+    status: "PUBLISHED",
+  },
+  {
+    slug: "blame",
+    kind: "PROJECT",
+    title: "Fondateur de Blame",
+    organization: "Blame",
+    startedOn: "2026-05",
+    showMonths: true,
+    summary:
+      "L’environnement de développement où des agents IA codent, et où l’humain garde la décision finale. Je le conçois et le développe de bout en bout.",
+    technologies: ["TypeScript", "Electron", "React", "AdonisJS"],
+    projectSlugs: ["blame"],
+    websiteUrl: "https://blame.so",
+    status: "PUBLISHED",
+  },
+  {
+    slug: "politehnica-bucarest",
+    kind: "EDUCATION",
+    title: "Master 1 Artificial Intelligence · Erasmus+",
+    organization: "Université POLITEHNICA de Bucarest",
+    location: "Roumanie",
+    startedOn: "2026-09",
+    endedOn: "2027-06",
+    showMonths: false,
+    summary:
+      "Une année de mobilité à la faculté d’automatique et d’informatique (ACS), avec des enseignements de master en anglais.",
+    highlights: [
+      "IA et data science : réseaux de neurones, vision par ordinateur, représentation des connaissances.",
+      "Data mining pour la finance computationnelle.",
+      "Analyse des marchés financiers et conception de logiciels bancaires.",
+    ],
+    websiteUrl: "https://upb.ro",
+    status: "PUBLISHED",
   },
 ];

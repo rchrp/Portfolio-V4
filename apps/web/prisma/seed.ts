@@ -1,16 +1,21 @@
-// Writes the projects from seed-data.ts into the database.
+// Writes the projects and journey steps from seed-data.ts into the database.
 //
-//   pnpm --filter web db:seed              # create or update every project
-//   pnpm --filter web db:seed --if-empty   # only when there is no project yet
+//   pnpm --filter web db:seed              # create or update every record
+//   pnpm --filter web db:seed --if-empty   # only fill tables that are empty
 //
-// Projects are matched by slug. Projects missing from seed-data.ts are left
-// untouched, and a publication date, once set, is kept.
+// Projects and steps are matched by slug. Records missing from seed-data.ts
+// are left untouched, and a publication date, once set, is kept.
 import { PrismaPg } from "@prisma/adapter-pg";
 import { config } from "dotenv";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { seedProjects, type SeedProject } from "./seed-data";
+import {
+  seedJourney,
+  seedProjects,
+  type SeedJourneyEntry,
+  type SeedProject,
+} from "./seed-data";
 
 config({
   path: resolve(dirname(fileURLToPath(import.meta.url)), "../.env"),
@@ -75,15 +80,44 @@ async function writeProject(project: SeedProject, sortOrder: number) {
   });
 }
 
+async function writeJourneyEntry(entry: SeedJourneyEntry) {
+  const { slug, startedOn, endedOn, ...fields } = entry;
+  const data = {
+    ...fields,
+    location: fields.location ?? null,
+    description: fields.description ?? null,
+    highlights: fields.highlights ?? [],
+    technologies: fields.technologies ?? [],
+    projectSlugs: fields.projectSlugs ?? [],
+    websiteUrl: fields.websiteUrl ?? null,
+    startedOn: toDate(startedOn),
+    endedOn: endedOn ? toDate(endedOn) : null,
+  };
+  await database.journeyEntry.upsert({
+    where: { slug },
+    create: { slug, ...data },
+    update: data,
+  });
+}
+
 async function main() {
-  if (process.argv.includes("--if-empty") && (await database.project.count())) {
-    console.log("[seed] Projects already present; nothing to do.");
-    return;
+  const ifEmpty = process.argv.includes("--if-empty");
+
+  if (ifEmpty && (await database.project.count())) {
+    console.log("[seed] Projects already present; skipped.");
+  } else {
+    for (const [index, project] of seedProjects.entries()) {
+      await writeProject(project, (index + 1) * 10);
+    }
+    console.log(`[seed] ${seedProjects.length} projects written.`);
   }
-  for (const [index, project] of seedProjects.entries()) {
-    await writeProject(project, (index + 1) * 10);
+
+  if (ifEmpty && (await database.journeyEntry.count())) {
+    console.log("[seed] Journey already present; skipped.");
+  } else {
+    for (const entry of seedJourney) await writeJourneyEntry(entry);
+    console.log(`[seed] ${seedJourney.length} journey steps written.`);
   }
-  console.log(`[seed] ${seedProjects.length} projects written.`);
 }
 
 main()

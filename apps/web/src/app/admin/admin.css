@@ -1819,3 +1819,32 @@
   color: var(--adm-ink);
   font-size: 0.875rem;
 }
+
+/* Journey: the start year stands in for the project thumbnail. */
+.adm-journey {
+  grid-template-columns: 4.25rem minmax(0, 1fr) auto auto;
+  padding-left: 1.25rem;
+}
+
+.adm-journey-year {
+  color: var(--adm-ink-3);
+  font-family: var(--adm-mono);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-page-head .adm-row {
+  gap: 0.5rem;
+}
+
+.adm-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.65rem 1.25rem;
+}
+
+@media (max-width: 720px) {
+  .adm-journey {
+    grid-template-columns: 3rem minmax(0, 1fr) auto;
+  }
+}

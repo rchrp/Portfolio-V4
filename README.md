@@ -38,7 +38,7 @@ pnpm format:check
 pnpm db:up          # start PostgreSQL (docker compose)
 pnpm db:down        # stop it; the data stays in the postgres-data volume
 pnpm db:migrate     # apply pending migrations
-pnpm db:seed        # write prisma/seed-data.ts into the database
+pnpm db:seed        # write prisma/seed-data.ts (projects, journey) into the database
 pnpm db:reset       # drop everything, re-apply migrations, then seed
 pnpm db:studio      # browse and edit records locally
 
@@ -74,6 +74,20 @@ The monitor is a third-party model, adapted for the site by `apps/web/scripts/bu
 
 ```bash
 pnpm --filter web model
+```
+
+## Journey page
+
+`/parcours` tells the journey (studies, jobs, freelance work, projects) as a corridor in the dark, walked as the page scrolls. Its steps live in the `JourneyEntry` table, are edited from the admin panel (**Parcours**) and are ordered by start date; its copy lives in `apps/web/src/lib/journey-content.ts`. A step can link the published projects made during it, which open in the homepage's showcase (`/?projet=<slug>`), and each one has an anchor (`/parcours#<slug>`).
+
+- **three.js** (`src/components/journey/journey-scene.ts`, loaded on demand) draws the world: a floor of square pixels fading into fog, the path (orange where it has been walked), a marker and a connector per step, floating dust, and a desk lamp that flickers on and lights the start of the path.
+- **The steps stay HTML**, so they remain crisp, selectable and accessible: the scene places them in the same 3D space with CSS transforms computed from its camera (the CSS3DRenderer technique). Depth of field is a CSS blur growing with the distance to the step being read; steps ahead wait in the haze, steps already read fly past, blurred.
+- Arrow keys and the side rail step through the journey. With reduced motion, without WebGL or without JavaScript, the steps read as a plain list.
+
+The lamp is a third-party model, adapted by `apps/web/scripts/build-lamp-model.mjs`: transforms baked, one unit tall with its base on the origin, attributes quantized (`KHR_mesh_quantization`, read by three.js without a decoder), textures resized and re-encoded as WebP (3.3 MB → 0.4 MB). Rebuild after changing it:
+
+```bash
+pnpm --filter web model:lamp
 ```
 
 ## Project catalog
@@ -177,9 +191,13 @@ Objects are written with a one-year immutable `Cache-Control` and saved in the p
 
 ## Third-party assets and credits
 
-The source code of this repository is licensed under the [MIT License](LICENSE). The following asset is **not** covered by the MIT License and keeps its own license:
+The source code of this repository is licensed under the [MIT License](LICENSE). The following assets are **not** covered by the MIT License and keep their own licenses:
 
 - **3D model** — ["Computer Terminal"](https://skfb.ly/6vrwA) by [Chris Sweetwood](https://sketchfab.com/ChrisSweetwood), licensed under [Creative Commons Attribution-ShareAlike 4.0](http://creativecommons.org/licenses/by-sa/4.0/) (CC BY-SA 4.0).
   - Files: `apps/web/assets/models/computer_terminal.glb` (original) and `apps/web/public/models/computer-terminal.glb` (adapted).
   - Changes: backdrop planes removed, screen glass split into a separate primitive with remapped UVs, textures resized and converted to WebP. The adapted model is distributed under the same CC BY-SA 4.0 license.
   - The site credits the author in its footer.
+- **3D model** — ["Desk lamp"](https://sketchfab.com/3d-models/desk-lamp-b9458e04d30e4b6284d46d35880a9b95) by [HASSAN](https://sketchfab.com/7ASSAN), licensed under [Creative Commons Attribution 4.0](http://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).
+  - Files: `apps/web/assets/models/desk_lamp.glb` (original) and `apps/web/public/models/desk-lamp.glb` (adapted).
+  - Changes: transforms baked, rescaled, attributes quantized, textures resized and converted to WebP.
+  - The /parcours page credits the author below the timeline.

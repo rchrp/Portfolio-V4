@@ -105,6 +105,49 @@ model ProjectMetric {
   @@index([projectId, sortOrder])
 }
 
+// ─── Journey ─────────────────────────────────────────────────────────────────
+// The /parcours timeline: studies, jobs and the milestones in between.
+
+enum JourneyKind {
+  EDUCATION
+  WORK
+  FREELANCE
+  PROJECT
+  MILESTONE
+}
+
+/// One step of the journey. The timeline orders steps by start date.
+model JourneyEntry {
+  id           String        @id @default(cuid())
+  /// Anchor on the page, e.g. /parcours#epitech.
+  slug         String        @unique @db.VarChar(100)
+  kind         JourneyKind
+  /// What was done, e.g. "Développeur fullstack".
+  title        String        @db.VarChar(120)
+  /// Where, e.g. "Visiativ" or "Epitech".
+  organization String        @db.VarChar(120)
+  location     String?       @db.VarChar(120)
+  startedOn    DateTime      @db.Date
+  /// Null while it goes on. May lie ahead, e.g. a degree's expected end.
+  endedOn      DateTime?     @db.Date
+  /// Off: the period reads in years only, e.g. "2020 – 2023".
+  showMonths   Boolean       @default(true)
+  /// One sentence under the title.
+  summary      String        @db.VarChar(320)
+  description  String?       @db.Text
+  /// Key points, one short sentence each.
+  highlights   String[]      @default([])
+  technologies String[]      @default([])
+  /// Slugs of the projects made along the way, linked from the card.
+  projectSlugs String[]      @default([])
+  websiteUrl   String?       @db.VarChar(2048)
+  status       ProjectStatus @default(DRAFT)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([status, startedOn])
+}
+
 // ─── Admin panel ─────────────────────────────────────────────────────────────
 // A single administrator signs in with passkeys (WebAuthn). There is no
 // password: the first passkey is enrolled through a one-time link printed by

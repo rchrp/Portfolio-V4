@@ -18,7 +18,8 @@
     "db:studio": "prisma studio",
     "admin:invite": "tsx scripts/admin-invite.ts",
     "edges": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-edge-maps.mjs",
-    "model": "node scripts/build-model.mjs"
+    "model": "node scripts/build-model.mjs",
+    "model:lamp": "node scripts/build-lamp-model.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

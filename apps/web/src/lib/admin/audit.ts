@@ -15,7 +15,11 @@ export type AuditAction =
   | "project.status"
   | "project.reordered"
   | "project.deleted"
-  | "project.image.uploaded";
+  | "project.image.uploaded"
+  | "journey.created"
+  | "journey.updated"
+  | "journey.status"
+  | "journey.deleted";
 
 /** Records an event. Never throws: auditing must not break the action. */
 export async function audit(action: AuditAction, detail?: string) {

@@ -827,7 +827,7 @@ body {
     .hero-night-glow {
       animation: night-glow-drift linear both;
       animation-timeline: view();
-      animation-range: entry 0% exit 100%;
+      animation-range: cover;
     }
 
     .portfolio-hero {

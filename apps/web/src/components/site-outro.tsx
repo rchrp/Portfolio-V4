@@ -107,7 +107,6 @@ export function SiteOutro() {
       </div>
       <div className="outro-footer">
         <span>© {new Date().getFullYear()} Raphaël Charpentier</span>
-        <span>{outro.signature}</span>
         <span className="outro-credits">
           Modèle 3D «&nbsp;
           <a href={credits.model.url} target="_blank" rel="noopener noreferrer">

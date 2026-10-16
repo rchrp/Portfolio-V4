@@ -3,7 +3,7 @@
 
 export const manifesto = {
   // Words wrapped in *asterisks* are highlighted with the accent color.
-  text: "Je conçois et développe des produits web de bout en bout, de l’interface que l’on touche au système qui la fait tenir. *Chaque pixel* a une raison d’être. Chaque ligne de code aussi.",
+  text: "Le web est rempli de sites qu’on oublie sitôt l’onglet fermé. J’essaie de construire *les autres.*",
   disciplines: [
     { label: "Interfaces", detail: "React, Next.js, animation & WebGL" },
     { label: "Systèmes", detail: "Node.js, API, PostgreSQL" },
@@ -27,9 +27,8 @@ export const contact = {
 };
 
 export const outro = {
-  title: ["Un projet en tête\u00a0?", "Allumons-le."],
+  title: ["Un projet en tête\u00a0?", "Parlons-en."],
   lead: "Disponible pour des missions freelance : produits web, interfaces sur mesure et expériences interactives.",
-  signature: "Conçu et développé pixel par pixel.",
 };
 
 // Third-party assets that require attribution (see README).

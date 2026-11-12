@@ -562,6 +562,7 @@ export class MonitorRenderer {
   /** The projects shown on the glass, in their order on the page. */
   setProjects(projects: ScreenProject[]) {
     this.projects = projects;
+    this.composer.preload(projects);
     this.holograms.setProjects(projects);
     this.wake();
   }

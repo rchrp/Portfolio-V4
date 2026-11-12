@@ -56,11 +56,29 @@ export type ScreenRegion = {
 
 type Artwork = {
   image: HTMLImageElement;
-  /** The picture blurred, fading in towards the bottom. */
-  blur: HTMLCanvasElement;
   width: number;
   height: number;
+  /** The picture blurred, fading in towards the bottom. */
+  blur: HTMLCanvasElement;
+  /**
+   * The picture as the glass shows it once revealed, blurred towards the
+   * bottom and shaded down to the night, at the canvas's resolution.
+   */
+  layer: HTMLCanvasElement;
+  /** What tints the screen's light; null when the picture can't be read. */
+  light: Light | null;
 };
+
+/**
+ * The picture's colors summed over its `lightGrid` × `lightGrid` samples,
+ * each weighted by its opacity, and the sum of those opacities: the
+ * project's accent fills in what the picture leaves see-through.
+ */
+type Light = { color: [number, number, number]; opacity: number };
+
+/** No picture: the light takes the accent alone. */
+const noLight: Light = { color: [0, 0, 0], opacity: 0 };
+const lightGrid = 8;
 
 // Drawing units, about 1.69:1 like the glass. The canvas holds 4/3 as many
 // pixels.
@@ -105,6 +123,19 @@ type Metrics = {
   /** The words of a message, and its kicker. */
   message: number;
   messageKicker: number;
+};
+
+/** The words of a project laid out on the glass, in drawing units. */
+type ProjectText = {
+  summary: string[];
+  summaryTop: number;
+  title: { size: number; lines: string[] };
+  titleTop: number;
+  /** Width of the title's first line, where its number tucks in. */
+  titleWidth: number;
+  kickerTop: number;
+  /** Facts from the bottom up, their values wrapped to the side column. */
+  facts: { label: string; value: string[] }[];
 };
 
 const metrics: Record<ScreenLayout, Metrics> = {
@@ -153,6 +184,7 @@ const metrics: Record<ScreenLayout, Metrics> = {
 
 const artworkCache = new Map<string, Promise<Artwork | null>>();
 const loadedArtwork = new Map<string, Artwork | null>();
+const images = new Map<string, Promise<HTMLImageElement | null>>();
 
 function createCanvas(width: number, height: number) {
   const canvas = document.createElement("canvas");
@@ -164,15 +196,40 @@ function createCanvas(width: number, height: number) {
   return { canvas, context };
 }
 
+/**
+ * Loads and decodes a picture once for the glass, the holograms and the
+ * dive; one that failed is tried again on the next call.
+ */
 export function loadImage(src: string) {
-  return new Promise<HTMLImageElement | null>((resolve) => {
-    const image = new Image();
-    if (!src.startsWith("/")) image.crossOrigin = "anonymous";
-    image.decoding = "async";
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
+  let pending = images.get(src);
+  if (!pending) {
+    pending = fetchImage(src);
+    images.set(src, pending);
+    void pending.then((image) => {
+      if (!image) images.delete(src);
+    });
+  }
+  return pending;
+}
+
+async function fetchImage(src: string) {
+  const image = new Image();
+  if (!src.startsWith("/")) image.crossOrigin = "anonymous";
+  image.decoding = "async";
+  const loaded = await new Promise<boolean>((resolve) => {
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
     image.src = src;
   });
+  if (!loaded) return null;
+  try {
+    // Decoded off the main thread, rather than by the first drawImage.
+    await image.decode();
+  } catch {
+    // A picture the browser declines to decode ahead still draws: its first
+    // drawImage decodes it.
+  }
+  return image;
 }
 
 /** Where a picture of this size lands when it covers `width` × `height`. */
@@ -191,8 +248,63 @@ function coverRect(
   };
 }
 
+/** The picture, covering the glass. */
+function drawCover(
+  context: CanvasRenderingContext2D,
+  { image, width, height }: Pick<Artwork, "image" | "width" | "height">,
+) {
+  const cover = coverRect(width, height);
+  context.drawImage(image, cover.x, cover.y, cover.width, cover.height);
+}
+
+// Down to the night of the next chapters, as in the showcase.
+function fillShade(context: CanvasRenderingContext2D) {
+  const shade = context.createLinearGradient(0, 0, 0, HEIGHT);
+  shade.addColorStop(0, "rgba(12, 11, 9, 0.35)");
+  shade.addColorStop(0.16, "rgba(12, 11, 9, 0)");
+  shade.addColorStop(0.42, "rgba(12, 11, 9, 0.08)");
+  shade.addColorStop(0.68, "rgba(12, 11, 9, 0.6)");
+  shade.addColorStop(1, "rgba(12, 11, 9, 0.92)");
+  context.fillStyle = shade;
+  context.fillRect(0, 0, WIDTH, HEIGHT);
+}
+
+// Sampled down to a few pixels, as if drawn over the project's accent.
+function measureLight(image: HTMLImageElement): Light | null {
+  const { context } = createCanvas(lightGrid, lightGrid);
+  try {
+    context.drawImage(image, 0, 0, lightGrid, lightGrid);
+    const data = context.getImageData(0, 0, lightGrid, lightGrid).data;
+    const color: Light["color"] = [0, 0, 0];
+    let opacity = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      const alpha = data[index + 3] / 255;
+      color[0] += data[index] * alpha;
+      color[1] += data[index + 1] * alpha;
+      color[2] += data[index + 2] * alpha;
+      opacity += alpha;
+    }
+    return { color, opacity };
+  } catch {
+    // Cross-origin picture without CORS: unreadable.
+    return null;
+  }
+}
+
+/** "#rrggbb" as 0–255 channels; null for any other notation. */
+function parseHex(color: string): [number, number, number] | null {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!match) return null;
+  return [
+    parseInt(match[1], 16),
+    parseInt(match[2], 16),
+    parseInt(match[3], 16),
+  ];
+}
+
 // Scaled down then up, the picture blurs without canvas filters, which not
-// every browser supports.
+// every browser supports. All that the glass shows of it, but the text, is
+// drawn once here rather than on every frame of its reveal.
 function prepareArtwork(image: HTMLImageElement): Artwork {
   // Vector pictures without intrinsic size report 0.
   const width = image.naturalWidth || WIDTH;
@@ -211,7 +323,23 @@ function prepareArtwork(image: HTMLImageElement): Artwork {
   blur.context.globalCompositeOperation = "destination-in";
   blur.context.fillStyle = fade;
   blur.context.fillRect(0, 0, 288, 192);
-  return { image, blur: blur.canvas, width, height };
+
+  const layer = createCanvas(WIDTH * pixelRatio, HEIGHT * pixelRatio);
+  layer.context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  layer.context.fillStyle = night;
+  layer.context.fillRect(0, 0, WIDTH, HEIGHT);
+  drawCover(layer.context, { image, width, height });
+  layer.context.drawImage(blur.canvas, 0, 0, WIDTH, HEIGHT);
+  fillShade(layer.context);
+
+  return {
+    image,
+    width,
+    height,
+    blur: blur.canvas,
+    layer: layer.canvas,
+    light: measureLight(image),
+  };
 }
 
 function loadArtwork(src: string) {
@@ -241,6 +369,11 @@ export class ScreenComposer {
   private mode: Mode = { kind: "off" };
   private artwork: Artwork | null = null;
   private layout: ScreenLayout = "wide";
+  /** The words of each project, measured once per layout. */
+  private readonly texts = new WeakMap<
+    ScreenProject,
+    Partial<Record<ScreenLayout, ProjectText>>
+  >();
   private hovered = false;
   private focus = 0;
   private drawnFocus = 0;
@@ -292,6 +425,11 @@ export class ScreenComposer {
     this.clear();
   }
 
+  /** Loads and prepares the pictures of these projects ahead of their turn. */
+  preload(projects: ScreenProject[]) {
+    for (const project of projects) void loadArtwork(project.imageUrl);
+  }
+
   showProject(project: ScreenProject, now: number, instant = false) {
     this.mode = {
       kind: "project",
@@ -302,14 +440,14 @@ export class ScreenComposer {
     this.stale = true;
     const src = project.imageUrl;
     this.artwork = loadedArtwork.get(src) ?? null;
-    this.measureLight(this.artwork?.image ?? null, project.accentColor);
+    this.tint(this.artwork, project.accentColor);
     if (loadedArtwork.has(src)) return;
     void loadArtwork(src).then((artwork) => {
       if (this.mode.kind !== "project" || this.mode.project.imageUrl !== src)
         return;
       this.artwork = artwork;
       this.stale = true;
-      this.measureLight(artwork?.image ?? null, project.accentColor);
+      this.tint(artwork, project.accentColor);
     });
   }
 
@@ -453,25 +591,23 @@ export class ScreenComposer {
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  private measureLight(image: HTMLImageElement | null, accent: string) {
-    const { context } = createCanvas(8, 8);
-    context.fillStyle = accent;
-    context.fillRect(0, 0, 8, 8);
-    try {
-      if (image) context.drawImage(image, 0, 0, 8, 8);
-      const data = context.getImageData(0, 0, 8, 8).data;
-      const sum = [0, 0, 0];
-      for (let index = 0; index < data.length; index += 4) {
-        sum[0] += data[index];
-        sum[1] += data[index + 1];
-        sum[2] += data[index + 2];
-      }
+  /**
+   * Tints the light with the picture over the project's accent, from what
+   * `prepareArtwork` measured; keeps the previous tint when either can't be
+   * read.
+   */
+  private tint(artwork: Artwork | null, accentColor: string) {
+    const accent = parseHex(accentColor);
+    const light = artwork ? artwork.light : noLight;
+    if (!accent || !light) return;
+    const samples = lightGrid * lightGrid;
+    for (let channel = 0; channel < 3; channel += 1) {
+      const average =
+        (light.color[channel] + accent[channel] * (samples - light.opacity)) /
+        samples /
+        255;
       // Lean towards white: a CRT's light reads mostly as a cool glow.
-      for (let channel = 0; channel < 3; channel += 1) {
-        this.lightColor[channel] = (sum[channel] / 64 / 255) * 0.55 + 0.45;
-      }
-    } catch {
-      // Cross-origin image without CORS: keep the previous tint.
+      this.lightColor[channel] = average * 0.55 + 0.45;
     }
   }
 
@@ -591,6 +727,59 @@ export class ScreenComposer {
     }
   }
 
+  /** Where the words of a project go in the current layout. */
+  private projectText(project: ScreenProject): ProjectText {
+    let layouts = this.texts.get(project);
+    if (!layouts) {
+      layouts = {};
+      this.texts.set(project, layouts);
+    }
+    return (layouts[this.layout] ??= this.measureProject(
+      project,
+      metrics[this.layout],
+    ));
+  }
+
+  private measureProject(project: ScreenProject, sizes: Metrics): ProjectText {
+    const left = sizes.margin;
+    const sideLeft = WIDTH - sizes.margin - sizes.side;
+    const textRight = sizes.side ? sideLeft - 64 : WIDTH - sizes.margin;
+    const bottom = HEIGHT - sizes.bottom;
+
+    this.font(400, sizes.summary);
+    const summary = this.wrap(
+      project.summary,
+      Math.min(sizes.summaryWidth, textRight - left),
+      sizes.summaryLines,
+    ).lines;
+    const summaryTop = bottom - summary.length * sizes.summaryLeading;
+    const title = this.fitTitle(project.title, textRight - left, sizes);
+    this.font(450, title.size, titleTracking);
+    const titleWidth = this.context.measureText(title.lines[0]).width;
+    const titleTop =
+      summaryTop - title.size * 0.22 - title.lines.length * title.size * 0.9;
+
+    const facts: ProjectText["facts"] = [];
+    if (sizes.side) {
+      this.font(400, sizes.value);
+      for (const fact of [...project.facts].reverse()) {
+        facts.push({
+          label: fact.label,
+          value: this.wrap(fact.value, sizes.side, 2).lines,
+        });
+      }
+    }
+    return {
+      summary,
+      summaryTop,
+      title,
+      titleTop,
+      titleWidth,
+      kickerTop: titleTop - sizes.kicker - 26,
+      facts,
+    };
+  }
+
   private drawProject(project: ScreenProject, elapsed: number) {
     const context = this.context;
     const sizes = metrics[this.layout];
@@ -608,31 +797,21 @@ export class ScreenComposer {
     context.rect(0, 0, WIDTH, HEIGHT * loaded);
     context.clip();
     const artwork = this.artwork;
-    if (artwork) {
-      const cover = coverRect(artwork.width, artwork.height);
-      context.drawImage(
-        artwork.image,
-        cover.x,
-        cover.y,
-        cover.width,
-        cover.height,
-      );
+    if (artwork && overlay === 1) {
+      // Pixel for pixel: the layer has the canvas's resolution.
+      context.drawImage(artwork.layer, 0, 0, WIDTH, HEIGHT);
     } else {
-      context.fillStyle = project.accentColor;
-      context.globalAlpha = 0.4;
-      context.fillRect(0, 0, WIDTH, HEIGHT);
+      // Diving in, the blur and the shade fade out over the picture.
+      if (artwork) drawCover(context, artwork);
+      else {
+        context.fillStyle = project.accentColor;
+        context.globalAlpha = 0.4;
+        context.fillRect(0, 0, WIDTH, HEIGHT);
+      }
+      context.globalAlpha = overlay;
+      if (artwork) context.drawImage(artwork.blur, 0, 0, WIDTH, HEIGHT);
+      fillShade(context);
     }
-    context.globalAlpha = overlay;
-    if (artwork) context.drawImage(artwork.blur, 0, 0, WIDTH, HEIGHT);
-    // Down to the night of the next chapters, as in the showcase.
-    const shade = context.createLinearGradient(0, 0, 0, HEIGHT);
-    shade.addColorStop(0, "rgba(12, 11, 9, 0.35)");
-    shade.addColorStop(0.16, "rgba(12, 11, 9, 0)");
-    shade.addColorStop(0.42, "rgba(12, 11, 9, 0.08)");
-    shade.addColorStop(0.68, "rgba(12, 11, 9, 0.6)");
-    shade.addColorStop(1, "rgba(12, 11, 9, 0.92)");
-    context.fillStyle = shade;
-    context.fillRect(0, 0, WIDTH, HEIGHT);
     context.restore();
     if (loaded < 1) {
       context.fillStyle = phosphor;
@@ -652,21 +831,10 @@ export class ScreenComposer {
 
     const left = sizes.margin;
     const sideLeft = WIDTH - sizes.margin - sizes.side;
-    const textRight = sizes.side ? sideLeft - 64 : WIDTH - sizes.margin;
     const bottom = HEIGHT - sizes.bottom;
-
-    this.font(400, sizes.summary);
-    const summary = this.wrap(
-      project.summary,
-      Math.min(sizes.summaryWidth, textRight - left),
-      sizes.summaryLines,
-    ).lines;
-    const summaryTop = bottom - summary.length * sizes.summaryLeading;
-    const title = this.fitTitle(project.title, textRight - left, sizes);
+    const text = this.projectText(project);
+    const { summary, summaryTop, title, titleTop, kickerTop } = text;
     const titleLeading = title.size * 0.9;
-    const titleTop =
-      summaryTop - title.size * 0.22 - title.lines.length * titleLeading;
-    const kickerTop = titleTop - sizes.kicker - 26;
 
     // Kicker: context · period.
     let offset = rise(0);
@@ -683,15 +851,13 @@ export class ScreenComposer {
 
     // Title, with its number tucked behind its top right.
     offset = rise(1);
-    this.font(450, title.size, titleTracking);
-    const firstLine = context.measureText(title.lines[0]).width;
     const indexSize = title.size * 0.55;
     this.font(500, indexSize, -0.07);
     context.fillStyle = project.accentColor;
     context.textAlign = "right";
     context.fillText(
       pad(project.index + 1),
-      left + firstLine + indexSize * 0.5,
+      left + text.titleWidth + indexSize * 0.5,
       titleTop - indexSize * 0.32 + offset,
     );
     context.textAlign = "left";
@@ -720,11 +886,10 @@ export class ScreenComposer {
       // Facts above the "open" button, at the bottom right.
       offset = rise(3);
       let y = bottom - pillHeight - 30;
-      for (const fact of [...project.facts].reverse()) {
+      for (const fact of text.facts) {
         this.font(400, sizes.value);
-        const value = this.wrap(fact.value, sizes.side, 2).lines;
-        y -= value.length * sizes.value * 1.35;
-        value.forEach((line, row) => {
+        y -= fact.value.length * sizes.value * 1.35;
+        fact.value.forEach((line, row) => {
           context.fillStyle = phosphor;
           context.fillText(
             line,

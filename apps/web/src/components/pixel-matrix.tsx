@@ -10,8 +10,11 @@ import {
 type PixelCell = {
   x: number;
   y: number;
-  opacity: number;
+  /** Resting opacity, fade towards the canvas edges included. */
+  baseAlpha: number;
   edgeNoise: number;
+  /** Time at which the cell starts collapsing during the intro, in ms. */
+  introDelay: number;
   /** Field level shown before the current transition, 0 to 1. */
   from: number;
   /** Field level reached at the end of the current transition. */
@@ -131,6 +134,17 @@ function getField(
   return fieldCache.get(key)!;
 }
 
+/**
+ * Loads and reads an edge map ahead of its first display, so that showing it
+ * later neither fetches nor reads pixels. Takes the same props as the matrix.
+ */
+export function prefetchField(
+  field: string | null | undefined,
+  source: string | null | undefined,
+) {
+  void getField(field, source);
+}
+
 const parseColor = (value: string): [number, number, number] => {
   const hex = value.replace("#", "");
   const full =
@@ -212,6 +226,8 @@ export function PixelMatrix({
     const introFullScale = 0.92;
     const fieldSweepDuration = 720;
     const fieldCellDuration = 560;
+    // Below this strength the pointer moves cells by a fraction of a pixel.
+    const negligiblePointerStrength = 0.01;
     const reducedMotionQuery = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     );
@@ -336,11 +352,30 @@ export function PixelMatrix({
 
       for (let row = 0; row < rows; row += 1) {
         for (let column = 0; column < columns; column += 1) {
+          const x = startX + column * spacing;
+          const y = startY + row * spacing;
+          const edgeNoise = randomAt(column, row, 6);
+          const distanceFromEdge = Math.min(x, width - x, y, height - y);
+          const irregularEdgeDistance =
+            distanceFromEdge + (edgeNoise - 0.5) * fadeDistance * 0.45;
+          const edgeOpacity =
+            fadeDistance === 0
+              ? 1
+              : 0.32 +
+                smoothstep(clamp(irregularEdgeDistance / fadeDistance, 0, 1)) *
+                  0.68;
+          const rowProgress = clamp(
+            (y + spacing) / (height + spacing * 2),
+            0,
+            1,
+          );
+
           nextCells.push({
-            x: startX + column * spacing,
-            y: startY + row * spacing,
-            opacity: 0.56 + randomAt(column, row, 5) * 0.34,
-            edgeNoise: randomAt(column, row, 6),
+            x,
+            y,
+            baseAlpha: (0.56 + randomAt(column, row, 5) * 0.34) * edgeOpacity,
+            edgeNoise,
+            introDelay: rowProgress * introSweepDuration + edgeNoise * 60,
             from: 0,
             to: 0,
             delay: 0,
@@ -390,56 +425,42 @@ export function PixelMatrix({
       context.clearRect(0, 0, width, height);
       context.fillStyle = `rgb(${currentColor.map(Math.round).join(" ")})`;
       const responsiveRadius = Math.min(radius, Math.max(170, width * 0.25));
+      const responsiveRadiusSquared = responsiveRadius * responsiveRadius;
+      const pointerStrength =
+        pointer.strength < negligiblePointerStrength ? 0 : pointer.strength;
       const introElapsed = timestamp - introStartedAt;
 
       for (const cell of cells) {
-        const distanceFromPointer = Math.hypot(
-          cell.x - pointer.x,
-          cell.y - pointer.y,
-        );
-        const proximity = clamp(
-          1 - distanceFromPointer / responsiveRadius,
-          0,
-          1,
-        );
-        const influence = smoothstep(proximity) * pointer.strength;
+        let influence = 0;
+
+        if (pointerStrength > 0) {
+          const offsetX = cell.x - pointer.x;
+          const offsetY = cell.y - pointer.y;
+          const distanceSquared = offsetX * offsetX + offsetY * offsetY;
+
+          // Cells out of reach of the pointer keep a zero influence.
+          if (distanceSquared < responsiveRadiusSquared) {
+            const proximity = 1 - Math.sqrt(distanceSquared) / responsiveRadius;
+            influence = smoothstep(proximity) * pointerStrength;
+          }
+        }
+
         const level = levelOf(cell, timestamp);
         const interactiveScale = Math.max(
           baseScale + (expandedScale - baseScale) * influence,
           baseScale + (fieldExpandedScale - baseScale) * level,
         );
-        const distanceFromEdge = Math.min(
-          cell.x,
-          width - cell.x,
-          cell.y,
-          height - cell.y,
-        );
-        const irregularEdgeDistance =
-          distanceFromEdge + (cell.edgeNoise - 0.5) * fadeDistance * 0.45;
-        const edgeOpacity =
-          fadeDistance === 0
-            ? 1
-            : 0.32 +
-              smoothstep(clamp(irregularEdgeDistance / fadeDistance, 0, 1)) *
-                0.68;
         const fieldOpacity =
           restAlpha + (1 - restAlpha) * Math.max(level, influence * 0.6);
-        const interactiveAlpha = cell.opacity * edgeOpacity * fieldOpacity;
+        const interactiveAlpha = cell.baseAlpha * fieldOpacity;
 
         if (introComplete) {
           drawCell(cell, interactiveScale, interactiveAlpha);
           continue;
         }
 
-        const rowProgress = clamp(
-          (cell.y + spacing) / (height + spacing * 2),
-          0,
-          1,
-        );
-        const cellDelay =
-          rowProgress * introSweepDuration + cell.edgeNoise * 60;
         const collapseProgress = clamp(
-          (introElapsed - cellDelay) / introCellDuration,
+          (introElapsed - cell.introDelay) / introCellDuration,
           0,
           1,
         );

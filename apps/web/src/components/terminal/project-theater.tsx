@@ -10,11 +10,16 @@ import {
   type CSSProperties,
 } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
-import { PixelMatrix, type FieldRect } from "@/components/pixel-matrix";
+import {
+  PixelMatrix,
+  prefetchField,
+  type FieldRect,
+} from "@/components/pixel-matrix";
 import { useMonitor } from "@/components/monitor-stage";
 import {
   projectKindLabels,
   projectPeriod,
+  type Project,
   type ProjectCatalog,
 } from "@/lib/projects";
 import { projectsChapter } from "@/lib/site-content";
@@ -47,6 +52,9 @@ const stackedField: FieldRect = { x: 0.06, y: 0.7, width: 0.88, height: 0.24 };
 
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
+
+// The picture whose edges the wall draws when its edge map is missing.
+const fieldSourceOf = (project: Project) => project.logoUrl ?? project.imageUrl;
 
 // The wall keeps the site's orange, nudged towards each project's accent.
 function matrixColor(accent: string) {
@@ -163,6 +171,14 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
       })),
     [projects],
   );
+
+  // Every channel's edge map is ready before it is shown: switching projects
+  // then morphs the wall without fetching or reading pixels.
+  useEffect(() => {
+    for (const item of projects) {
+      prefetchField(item.edgeMapUrl, fieldSourceOf(item));
+    }
+  }, [projects]);
 
   useEffect(() => {
     const query = window.matchMedia(
@@ -423,7 +439,7 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
             edgeFade={90}
             intro={false}
             field={powered ? project.edgeMapUrl : null}
-            fieldSource={powered ? (project.logoUrl ?? project.imageUrl) : null}
+            fieldSource={powered ? fieldSourceOf(project) : null}
             fieldRect={layout === "side" ? sideField : stackedField}
             fieldFit="contain"
           />

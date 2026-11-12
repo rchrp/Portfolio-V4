@@ -23,6 +23,31 @@ type PixelCell = {
   delay: number;
 };
 
+/** Geometry of some cells, one path per opacity level. */
+type LevelBatches = { level: number; path: Path2D }[];
+
+/**
+ * Square block of neighbouring cells. While none of them is mid-transition
+ * or within the pointer's reach, their levels are constant and the tile is
+ * drawn from a cached geometry.
+ */
+type CellTile = {
+  cells: PixelCell[];
+  /** Bounds of the cell centres, to tell whether the pointer reaches them. */
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  /** Every cell at field level 0. Built with the grid. */
+  restBatches: LevelBatches;
+  /** Delays of the first and last cells that change level, if any does. */
+  transition: { firstDelay: number; lastDelay: number } | null;
+  /** Before the first changing cell starts. Built on first use. */
+  pendingBatches: LevelBatches | null;
+  /** Once the last changing cell has finished. Built on first use. */
+  settledBatches: LevelBatches | null;
+};
+
 type PointerState = {
   x: number;
   y: number;
@@ -242,7 +267,7 @@ export function PixelMatrix({
 
     let width = 0;
     let height = 0;
-    let cells: PixelCell[] = [];
+    let tiles: CellTile[] = [];
     let animationFrame = 0;
     let isVisible = true;
     let isPointerInside = false;
@@ -259,14 +284,17 @@ export function PixelMatrix({
     const fieldTransitionActive = (timestamp: number) =>
       timestamp - fieldStartedAt < fieldSweepDuration + fieldCellDuration;
 
-    const levelOf = (cell: PixelCell, timestamp: number) => {
-      if (cell.from === cell.to) return cell.to;
-      const progress = clamp(
-        (timestamp - fieldStartedAt - cell.delay * fieldSweepDuration) /
+    const transitionProgress = (delay: number, timestamp: number) =>
+      clamp(
+        (timestamp - fieldStartedAt - delay * fieldSweepDuration) /
           fieldCellDuration,
         0,
         1,
       );
+
+    const levelOf = (cell: PixelCell, timestamp: number) => {
+      if (cell.from === cell.to) return cell.to;
+      const progress = transitionProgress(cell.delay, timestamp);
       return cell.from + (cell.to - cell.from) * smoothstep(progress);
     };
 
@@ -319,28 +347,173 @@ export function PixelMatrix({
       return ((0.4 * sum) / count / 255 + (0.6 * maximum) / 255) * feather;
     };
 
+    // Cells are batched by opacity: one path and one fill per level instead
+    // of one per cell, which keeps dense matrices cheap to redraw.
+    const alphaLevels = 24;
+    let batches: (Path2D | undefined)[] = [];
+    // Side of a tile, in cells. A static tile joins the batches with one
+    // `addPath` per opacity level instead of one `rect` per cell.
+    const tileSize = 8;
+
+    const interactiveScaleOf = (level: number, influence: number) =>
+      Math.max(
+        baseScale + (expandedScale - baseScale) * influence,
+        baseScale + (fieldExpandedScale - baseScale) * level,
+      );
+
+    const interactiveAlphaOf = (
+      cell: PixelCell,
+      level: number,
+      influence: number,
+    ) =>
+      cell.baseAlpha *
+      (restAlpha + (1 - restAlpha) * Math.max(level, influence * 0.6));
+
+    const appendCell = (
+      target: (Path2D | undefined)[],
+      cell: PixelCell,
+      scale: number,
+      alpha: number,
+    ) => {
+      const level = Math.round(clamp(alpha, 0, 1) * alphaLevels);
+      if (level === 0) return;
+      const size = spacing * scale;
+      const halfSize = size / 2;
+      const path = (target[level] ??= new Path2D());
+
+      if (size < 6) {
+        path.rect(cell.x - halfSize, cell.y - halfSize, size, size);
+      } else {
+        path.roundRect(
+          cell.x - halfSize,
+          cell.y - halfSize,
+          size,
+          size,
+          Math.min(2, size * 0.16),
+        );
+      }
+    };
+
+    // Same arithmetic as `draw` for cells out of the pointer's reach, so a
+    // cached geometry renders exactly like the cells drawn one by one.
+    const buildBatches = (
+      tileCells: PixelCell[],
+      levelOfCell: (cell: PixelCell) => number,
+    ) => {
+      const paths: (Path2D | undefined)[] = [];
+
+      for (const cell of tileCells) {
+        const level = levelOfCell(cell);
+        appendCell(
+          paths,
+          cell,
+          interactiveScaleOf(level, 0),
+          interactiveAlphaOf(cell, level, 0),
+        );
+      }
+
+      const levelBatches: LevelBatches = [];
+      paths.forEach((path, level) => {
+        if (path) levelBatches.push({ level, path });
+      });
+      return levelBatches;
+    };
+
+    // Progress is monotonic in the delay: once the last changing cell has
+    // finished, or while the first has not started, no cell of the tile moves.
+    const phaseOf = (tile: CellTile, timestamp: number) => {
+      const { transition } = tile;
+
+      if (
+        transition === null ||
+        transitionProgress(transition.lastDelay, timestamp) === 1
+      ) {
+        return "settled";
+      }
+
+      return transitionProgress(transition.firstDelay, timestamp) === 0
+        ? "pending"
+        : "moving";
+    };
+
+    // Levels are constant while the tile is not moving.
+    const buildBatchesAt = (tile: CellTile, timestamp: number) =>
+      buildBatches(tile.cells, (cell) => levelOf(cell, timestamp));
+
+    // Cached geometry of a tile out of the pointer's reach, or null while
+    // some of its cells are mid-transition.
+    const staticBatchesOf = (tile: CellTile, timestamp: number) => {
+      const phase = phaseOf(tile, timestamp);
+      if (phase === "moving") return null;
+
+      return phase === "settled"
+        ? (tile.settledBatches ??= buildBatchesAt(tile, timestamp))
+        : (tile.pendingBatches ??= buildBatchesAt(tile, timestamp));
+    };
+
     const retargetField = (animate: boolean) => {
       const timestamp = performance.now();
       const sweepOriginX = width * (0.35 + Math.random() * 0.3);
       const sweepOriginY = height * 0.5;
       const sweepRadius = Math.hypot(width, height) * 0.6;
 
-      for (const cell of cells) {
-        const target = sampleField(cell);
-        cell.from = animate ? levelOf(cell, timestamp) : target;
-        cell.to = target;
-        // Radial sweep with grain: the new image condenses out of the old one.
-        cell.delay = clamp(
-          (Math.hypot(cell.x - sweepOriginX, cell.y - sweepOriginY) /
-            sweepRadius) *
-            0.8 +
-            cell.edgeNoise * 0.2,
-          0,
-          1,
-        );
+      for (const tile of tiles) {
+        // Where the new transition starts from, when the tile was not moving.
+        const previousBatches =
+          phaseOf(tile, timestamp) === "settled" ? tile.settledBatches : null;
+        let firstDelay = Infinity;
+        let lastDelay = -Infinity;
+        let startsAtRest = true;
+        let endsAtRest = true;
+
+        for (const cell of tile.cells) {
+          const target = sampleField(cell);
+          cell.from = animate ? levelOf(cell, timestamp) : target;
+          cell.to = target;
+          // Radial sweep with grain: the new image condenses out of the old one.
+          cell.delay = clamp(
+            (Math.hypot(cell.x - sweepOriginX, cell.y - sweepOriginY) /
+              sweepRadius) *
+              0.8 +
+              cell.edgeNoise * 0.2,
+            0,
+            1,
+          );
+
+          if (cell.from !== cell.to) {
+            firstDelay = Math.min(firstDelay, cell.delay);
+            lastDelay = Math.max(lastDelay, cell.delay);
+          }
+          if (cell.from !== 0) startsAtRest = false;
+          if (cell.to !== 0) endsAtRest = false;
+        }
+
+        tile.transition =
+          firstDelay <= lastDelay ? { firstDelay, lastDelay } : null;
+        tile.pendingBatches = startsAtRest ? tile.restBatches : previousBatches;
+        tile.settledBatches = endsAtRest ? tile.restBatches : null;
       }
 
       fieldStartedAt = animate && !prefersReducedMotion ? timestamp : -Infinity;
+    };
+
+    // Cells are listed row by row: the first one is the top-left corner of
+    // the tile and the last one its bottom-right corner.
+    const createTile = (tileCells: PixelCell[]): CellTile => {
+      const first = tileCells[0];
+      const last = tileCells[tileCells.length - 1];
+
+      return {
+        cells: tileCells,
+        minX: first.x,
+        minY: first.y,
+        maxX: last.x,
+        maxY: last.y,
+        restBatches: buildBatches(tileCells, () => 0),
+        transition: null,
+        pendingBatches: null,
+        settledBatches: null,
+      };
     };
 
     const buildCells = () => {
@@ -348,7 +521,8 @@ export function PixelMatrix({
       const rows = Math.ceil(height / spacing) + 2;
       const startX = (width - (columns - 1) * spacing) / 2;
       const startY = (height - (rows - 1) * spacing) / 2;
-      const nextCells: PixelCell[] = [];
+      const tileColumns = Math.ceil(columns / tileSize);
+      const tileCells: PixelCell[][] = [];
 
       for (let row = 0; row < rows; row += 1) {
         for (let column = 0; column < columns; column += 1) {
@@ -369,8 +543,11 @@ export function PixelMatrix({
             0,
             1,
           );
+          const tileIndex =
+            Math.floor(row / tileSize) * tileColumns +
+            Math.floor(column / tileSize);
 
-          nextCells.push({
+          (tileCells[tileIndex] ??= []).push({
             x,
             y,
             baseAlpha: (0.56 + randomAt(column, row, 5) * 0.34) * edgeOpacity,
@@ -383,33 +560,8 @@ export function PixelMatrix({
         }
       }
 
-      cells = nextCells;
+      tiles = tileCells.map(createTile);
       retargetField(false);
-    };
-
-    // Cells are batched by opacity: one path and one fill per level instead
-    // of one per cell, which keeps dense matrices cheap to redraw.
-    const alphaLevels = 24;
-    let batches: (Path2D | null)[] = [];
-
-    const drawCell = (cell: PixelCell, scale: number, alpha: number) => {
-      const level = Math.round(clamp(alpha, 0, 1) * alphaLevels);
-      if (level === 0) return;
-      const size = spacing * scale;
-      const halfSize = size / 2;
-      const path = (batches[level] ??= new Path2D());
-
-      if (size < 6) {
-        path.rect(cell.x - halfSize, cell.y - halfSize, size, size);
-      } else {
-        path.roundRect(
-          cell.x - halfSize,
-          cell.y - halfSize,
-          size,
-          size,
-          Math.min(2, size * 0.16),
-        );
-      }
     };
 
     const flushCells = () => {
@@ -430,7 +582,7 @@ export function PixelMatrix({
         pointer.strength < negligiblePointerStrength ? 0 : pointer.strength;
       const introElapsed = timestamp - introStartedAt;
 
-      for (const cell of cells) {
+      const drawLiveCell = (cell: PixelCell) => {
         let influence = 0;
 
         if (pointerStrength > 0) {
@@ -446,17 +598,12 @@ export function PixelMatrix({
         }
 
         const level = levelOf(cell, timestamp);
-        const interactiveScale = Math.max(
-          baseScale + (expandedScale - baseScale) * influence,
-          baseScale + (fieldExpandedScale - baseScale) * level,
-        );
-        const fieldOpacity =
-          restAlpha + (1 - restAlpha) * Math.max(level, influence * 0.6);
-        const interactiveAlpha = cell.baseAlpha * fieldOpacity;
+        const interactiveScale = interactiveScaleOf(level, influence);
+        const interactiveAlpha = interactiveAlphaOf(cell, level, influence);
 
         if (introComplete) {
-          drawCell(cell, interactiveScale, interactiveAlpha);
-          continue;
+          appendCell(batches, cell, interactiveScale, interactiveAlpha);
+          return;
         }
 
         const collapseProgress = clamp(
@@ -469,7 +616,42 @@ export function PixelMatrix({
           introFullScale + (interactiveScale - introFullScale) * collapseEase;
         const introAlpha = 0.96 + (interactiveAlpha - 0.96) * collapseEase;
 
-        drawCell(cell, introScale, introAlpha);
+        appendCell(batches, cell, introScale, introAlpha);
+      };
+
+      // The closest point of the tile is never farther than any of its
+      // cells: out of reach, every cell keeps a zero influence.
+      const pointerReaches = (tile: CellTile) => {
+        if (pointerStrength === 0) return false;
+        const offsetX = Math.max(
+          tile.minX - pointer.x,
+          0,
+          pointer.x - tile.maxX,
+        );
+        const offsetY = Math.max(
+          tile.minY - pointer.y,
+          0,
+          pointer.y - tile.maxY,
+        );
+        return offsetX * offsetX + offsetY * offsetY < responsiveRadiusSquared;
+      };
+
+      for (const tile of tiles) {
+        const tileBatches =
+          introComplete && !pointerReaches(tile)
+            ? staticBatchesOf(tile, timestamp)
+            : null;
+
+        if (tileBatches) {
+          for (const { level, path } of tileBatches) {
+            (batches[level] ??= new Path2D()).addPath(path);
+          }
+          continue;
+        }
+
+        for (const cell of tile.cells) {
+          drawLiveCell(cell);
+        }
       }
 
       flushCells();

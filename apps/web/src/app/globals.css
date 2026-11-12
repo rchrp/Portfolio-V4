@@ -1021,12 +1021,12 @@ body {
   inset: 0;
   opacity: calc(0.28 + var(--intro) * 0.36 - var(--outro) * 0.45);
   -webkit-mask-image: radial-gradient(
-    ellipse 85% 90% at 45% 45%,
+    ellipse 85% 90% at 50% 50%,
     #000 45%,
     transparent 100%
   );
   mask-image: radial-gradient(
-    ellipse 85% 90% at 45% 45%,
+    ellipse 85% 90% at 50% 50%,
     #000 45%,
     transparent 100%
   );
@@ -1044,23 +1044,13 @@ body {
 .theater-shade {
   position: absolute;
   inset: 0;
-  /* Darkens behind the project text only: the matrix draws the project's
-     picture in the upper left. */
-  background:
-    radial-gradient(
-      ellipse 48% 52% at 0% 100%,
-      #0c0b09e6 0%,
-      #0c0b09b3 45%,
-      #0c0b0900 100%
-    ),
-    linear-gradient(90deg, #0c0b0999 0%, #0c0b0900 22%),
-    linear-gradient(
-      to bottom,
-      var(--night) 0%,
-      #0c0b0900 14%,
-      #0c0b0900 86%,
-      var(--night) 100%
-    );
+  background: linear-gradient(
+    to bottom,
+    var(--night) 0%,
+    #0c0b0900 14%,
+    #0c0b0900 86%,
+    var(--night) 100%
+  );
   pointer-events: none;
 }
 
@@ -1072,6 +1062,8 @@ body {
   display: grid;
   gap: 1.5rem;
   max-width: 34rem;
+  /* Faded out, it still lies over the glass's corner. */
+  pointer-events: none;
 }
 
 .theater-heading,
@@ -1096,22 +1088,23 @@ body {
   line-height: 1.5;
 }
 
-.theater-info {
+/* Transparent over the glass, which draws the project: the renderer keeps it
+   on the glass as the camera moves. */
+.theater-screen-button {
   position: absolute;
-  z-index: 2;
-  bottom: clamp(2rem, 9svh, 6.5rem);
-  left: var(--page-gutter);
-  display: grid;
-  justify-items: start;
-  width: min(31rem, 34vw);
-  outline-offset: 1rem;
-  transition:
-    opacity 700ms var(--hero-ease),
-    transform 700ms var(--hero-ease),
-    visibility 0s linear 0s;
+  z-index: 1;
+  top: var(--screen-top, 0);
+  left: var(--screen-left, 0);
+  width: var(--screen-width, 0);
+  height: var(--screen-height, 0);
+  padding: 0;
+  border: 0;
+  border-radius: 1.25rem;
+  background: transparent;
+  color: inherit;
 }
 
-.theater:not([data-powered="true"]) :is(.theater-info, .theater-rail) {
+.theater:not([data-powered="true"]) :is(.theater-screen-button, .theater-rail) {
   visibility: hidden;
   opacity: 0;
   transform: translateY(1.25rem);
@@ -1121,65 +1114,16 @@ body {
     visibility 0s linear 400ms;
 }
 
-.theater-title {
-  position: relative;
-  isolation: isolate;
-  width: fit-content;
-  max-width: 100%;
-  margin: 0;
-  font-size: clamp(3rem, 6.2vw, 6.75rem);
-  font-weight: 450;
-  letter-spacing: -0.065em;
-  line-height: 0.92;
-  overflow-wrap: anywhere;
-}
-
-.theater-index {
-  top: -0.36em;
-  right: -0.62em;
-  font-size: 1.5em;
-  opacity: 0.9;
-}
-
-.theater-summary {
-  margin: 1.4rem 0 0.4rem;
-  font-size: clamp(1rem, 1.25vw, 1.2rem);
-  line-height: 1.45;
-  letter-spacing: -0.015em;
-}
-
-.theater-meta {
-  margin: 0;
-  color: var(--phosphor-dim);
-  font-size: 0.9rem;
-}
-
-.theater-technologies {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin: 1.4rem 0 1.8rem;
-  padding: 0;
-  list-style: none;
-}
-
-.theater-technologies li {
-  padding: 0.3rem 0.75rem;
-  border: 1px solid var(--phosphor-line);
-  border-radius: 999px;
-  color: var(--phosphor);
-  font-size: 0.8rem;
-}
-
+/* The channel list: on wide screens, under the project's mark, left of the
+   monitor. */
 .theater-rail {
   position: absolute;
   z-index: 2;
-  top: 50%;
-  right: var(--page-gutter);
+  top: 36%;
+  left: var(--page-gutter);
   display: grid;
-  justify-items: end;
+  justify-items: start;
   gap: 0.75rem;
-  translate: 0 -50%;
 }
 
 .theater-rail ol {
@@ -1194,10 +1138,10 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.8rem;
   min-height: 2.25rem;
-  padding: 0 0 0 1rem;
+  padding: 0 1rem 0 0;
   border: 0;
   background: transparent;
   color: var(--phosphor-dim);
@@ -1275,9 +1219,9 @@ body {
 .crt-fallback {
   position: absolute;
   top: 50%;
-  left: 62%;
-  width: min(46vw, 48rem);
-  aspect-ratio: 4 / 3;
+  left: 50%;
+  width: min(64vw, 58rem);
+  aspect-ratio: 3 / 2;
   padding: 2.5rem;
   border-radius: 1.75rem;
   background: #d8cfbe;
@@ -1304,6 +1248,59 @@ body {
   object-fit: cover;
 }
 
+/* Without WebGL, the flat monitor shows the text the glass would draw. */
+.crt-fallback .theater-screen-info {
+  position: absolute;
+  z-index: 1;
+  right: 2.5rem;
+  bottom: 2.5rem;
+  left: 2.5rem;
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+  padding: clamp(3rem, 8vw, 6rem) clamp(1.25rem, 3vw, 2.25rem)
+    clamp(1.25rem, 3vw, 2rem);
+  border-radius: 0 0 1rem 1rem;
+  background: linear-gradient(to bottom, #0c0b0900, #0c0b09e0 60%);
+}
+
+.theater-screen-kicker {
+  margin: 0;
+  color: #ece8dacc;
+  font-size: 0.85rem;
+}
+
+.theater-screen-title {
+  margin: 0;
+  font-size: clamp(2.25rem, 5vw, 4.5rem);
+  font-weight: 450;
+  letter-spacing: -0.065em;
+  line-height: 0.92;
+  overflow-wrap: anywhere;
+}
+
+.theater-screen-summary {
+  max-width: 32rem;
+  margin: 0;
+  font-size: clamp(0.95rem, 1.2vw, 1.1rem);
+  line-height: 1.45;
+}
+
+.crt-fallback .theater-screen-button {
+  z-index: 2;
+  top: 2.5rem;
+  left: 2.5rem;
+  width: calc(100% - 5rem);
+  height: calc(100% - 5rem);
+  border-radius: 1rem;
+}
+
+.theater-screen-cta {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+}
+
 .theater-empty,
 .theater-loading {
   display: grid;
@@ -1327,70 +1324,19 @@ body {
   font-size: 0.95rem;
 }
 
-@keyframes theater-rise {
-  from {
-    opacity: 0;
-    transform: translateY(0.75rem);
-    filter: blur(4px);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .theater-summary {
-    animation: theater-rise 700ms var(--hero-ease) 120ms both;
-  }
-
-  .theater-meta {
-    animation: theater-rise 700ms var(--hero-ease) 200ms both;
-  }
-
-  .theater-technologies li {
-    animation: theater-rise 600ms var(--hero-ease) calc(260ms + var(--i) * 60ms)
-      both;
-  }
-}
-
 @media (max-width: 52rem), (max-aspect-ratio: 4/5) {
+  /* The project's mark lights the wall below the monitor. */
   .theater-matrix {
     -webkit-mask-image: radial-gradient(
-      ellipse 90% 60% at 50% 32%,
+      ellipse 100% 70% at 50% 60%,
       #000 35%,
       transparent 100%
     );
     mask-image: radial-gradient(
-      ellipse 90% 60% at 50% 32%,
+      ellipse 100% 70% at 50% 60%,
       #000 35%,
       transparent 100%
     );
-  }
-
-  .theater-shade {
-    background: linear-gradient(
-      to bottom,
-      var(--night) 0%,
-      #0c0b0900 14%,
-      #0c0b0900 46%,
-      #0c0b09e6 64%,
-      var(--night) 100%
-    );
-  }
-
-  .theater-info {
-    right: var(--page-gutter);
-    bottom: max(1.5rem, env(safe-area-inset-bottom));
-    width: auto;
-  }
-
-  .theater-title {
-    font-size: clamp(2.6rem, 12vw, 4.25rem);
-  }
-
-  .theater-summary {
-    margin-top: 0.9rem;
-  }
-
-  .theater-technologies {
-    margin: 0.9rem 0 1.1rem;
   }
 
   .theater-heading {
@@ -1400,10 +1346,9 @@ body {
   .theater-rail {
     top: clamp(1rem, 4svh, 2.5rem);
     right: var(--page-gutter);
-    bottom: auto;
+    left: auto;
     grid-auto-flow: column;
     align-items: center;
-    translate: none;
   }
 
   .theater-rail ol {
@@ -1426,24 +1371,31 @@ body {
     height: 2px;
   }
 
-  .theater-info .pixel-button {
-    min-height: 2.75rem;
-  }
-
   .crt-fallback {
-    top: 30%;
-    left: 50%;
-    width: 84vw;
+    width: 90vw;
     padding: 1.25rem;
   }
 
   .crt-fallback::after {
     inset: 1.25rem;
   }
+
+  .crt-fallback .theater-screen-info {
+    right: 1.25rem;
+    bottom: 1.25rem;
+    left: 1.25rem;
+  }
+
+  .crt-fallback .theater-screen-button {
+    top: 1.25rem;
+    left: 1.25rem;
+    width: calc(100% - 2.5rem);
+    height: calc(100% - 2.5rem);
+  }
 }
 
 /* While the camera dives into the monitor, the room goes quiet. */
-.theater[data-dived] :is(.theater-header, .theater-info, .theater-rail) {
+.theater[data-dived] :is(.theater-header, .theater-screen, .theater-rail) {
   visibility: hidden;
   opacity: 0;
   transform: translateY(1.25rem);

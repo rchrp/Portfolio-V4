@@ -18,7 +18,12 @@ import {
 } from "@/lib/projects";
 import { projectsChapter } from "@/lib/site-content";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
-import type { CrtRenderer, TheaterLayout } from "./crt-renderer";
+import type {
+  CrtRenderer,
+  ScreenRect,
+  TheaterLayout,
+  TheaterScroll,
+} from "./crt-renderer";
 import {
   placeholderArtwork,
   ProjectShowcase,
@@ -26,7 +31,7 @@ import {
   type ShowcaseEntry,
   type ShowcasePhase,
 } from "./project-showcase";
-import { ScrambleText } from "./scramble-text";
+import type { ScreenProject } from "./screen-composer";
 
 // Scroll budget, in viewport heights: approaching the monitor, one channel per
 // project, then switching it off.
@@ -37,9 +42,11 @@ const OUTRO = 0.9;
 const channelStop = (index: number) => INTRO + index + 0.35;
 
 const brandRgb = [241, 90, 36];
-// Left of the monitor, above the project title: the monitor would hide it.
-const sideField: FieldRect = { x: 0.02, y: 0.07, width: 0.38, height: 0.42 };
-const stackedField: FieldRect = { x: 0, y: 0, width: 1, height: 0.62 };
+// From the top of the left column on wide screens, large enough to run under
+// the channel list and the edge of the monitor; below the monitor on narrow
+// ones, which would hide anything drawn behind it.
+const sideField: FieldRect = { x: 0.02, y: 0.04, width: 0.4, height: 0.52 };
+const stackedField: FieldRect = { x: 0.06, y: 0.7, width: 0.88, height: 0.24 };
 
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
@@ -97,8 +104,13 @@ type Showcase = {
   enterScale: number;
 };
 
-// The chips stay on one or two lines; the showcase lists the whole stack.
-const maxTechnologies = 5;
+// The button over the glass follows it as the camera moves.
+const placeOverGlass = (button: HTMLElement | null, rect: ScreenRect) => {
+  button?.style.setProperty("--screen-left", `${rect.left}px`);
+  button?.style.setProperty("--screen-top", `${rect.top}px`);
+  button?.style.setProperty("--screen-width", `${rect.width}px`);
+  button?.style.setProperty("--screen-height", `${rect.height}px`);
+};
 
 export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
   const { projects, source } = catalog;
@@ -106,6 +118,8 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
   const stickyRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CrtRenderer | null>(null);
+  // The scene loads after the first scroll events: it starts from the last.
+  const scrollRef = useRef<TheaterScroll>({ intro: 0, project: 0, outro: 0 });
   const activeRef = useRef(0);
   const poweredRef = useRef(false);
   const [active, setActive] = useState(0);
@@ -131,14 +145,21 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     [],
   );
 
+  // What the glass shows: the hero of the project's showcase.
   const screenProject = useMemo(
-    () =>
+    (): ScreenProject | undefined =>
       project && {
         slug: project.slug,
         title: project.title,
-        year: project.startYear,
-        technologies: project.technologies,
-        imageUrl: project.imageUrl,
+        summary: project.summary,
+        kicker: [projectKindLabels[project.kind], projectPeriod(project)],
+        facts: [
+          { label: "Rôle", value: project.role },
+          project.client
+            ? { label: "Client", value: project.client }
+            : { label: "Type", value: project.category },
+        ],
+        imageUrl: project.imageUrl ?? placeholderArtwork,
         accentColor: project.accentColor,
         index: active,
         total: count,
@@ -175,17 +196,18 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
         if (disposed) return;
         const styles = getComputedStyle(document.body);
         renderer = new CrtRenderer(canvas, {
-          mono: styles.getPropertyValue("--font-geist-mono") || "monospace",
           sans: styles.getPropertyValue("--font-geist-sans") || "sans-serif",
           reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
+          onScreenRect: (rect) => placeOverGlass(triggerRef.current, rect),
         });
-        await renderer.load("/models/computer-terminal.glb");
+        await renderer.load("/models/monitor.glb");
         if (disposed) {
           renderer.dispose();
           return;
         }
         rendererRef.current = renderer;
+        renderer.setScroll(scrollRef.current);
         resizeObserver = new ResizeObserver(([entry]) =>
           renderer?.resize(entry.contentRect.width, entry.contentRect.height),
         );
@@ -233,7 +255,8 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     const index = clamp(Math.floor(projectPosition), 0, count - 1);
     const shouldPower = intro > 0.55 && outro < 0.45;
 
-    rendererRef.current?.setScroll({ intro, project: projectPosition, outro });
+    scrollRef.current = { intro, project: projectPosition, outro };
+    rendererRef.current?.setScroll(scrollRef.current);
     const style = sectionRef.current?.style;
     style?.setProperty("--intro", intro.toFixed(4));
     style?.setProperty("--outro", outro.toFixed(4));
@@ -476,24 +499,11 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
             field={powered ? project.edgeMapUrl : null}
             fieldSource={powered ? (project.logoUrl ?? project.imageUrl) : null}
             fieldRect={layout === "side" ? sideField : stackedField}
-            // A logo is never cropped; a cover fills the stacked layout.
-            fieldFit={
-              layout === "side" || project.logoUrl ? "contain" : "cover"
-            }
+            fieldFit="contain"
           />
         </div>
 
         <canvas ref={canvasRef} className="theater-canvas" aria-hidden="true" />
-        {webgl === "failed" && (
-          <div className="crt-fallback" aria-hidden="true">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={project.imageUrl ?? "/projects/placeholder.svg"}
-              alt=""
-              onError={recoverArtwork}
-            />
-          </div>
-        )}
         <div className="theater-shade" aria-hidden="true" />
 
         <header className="theater-header">
@@ -503,61 +513,56 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
           <p className="theater-lead">{projectsChapter.lead}</p>
         </header>
 
+        {/* The glass draws the project; this is its text and its button.
+            Without WebGL, a flat monitor shows both. */}
         <div
-          className="theater-info"
+          className={
+            webgl === "failed"
+              ? "theater-screen crt-fallback"
+              : "theater-screen"
+          }
           role="group"
           aria-roledescription="chaîne"
           aria-label={`Projet ${active + 1} sur ${count}`}
-          tabIndex={0}
         >
-          <h3 className="theater-title">
-            <span
-              key={`index-${project.id}`}
-              className="big-index theater-index"
-              aria-hidden="true"
-            >
-              {pad(active + 1)}
-            </span>
-            <ScrambleText text={project.title} />
-          </h3>
-          <p key={`summary-${project.id}`} className="theater-summary">
-            {project.summary}
-          </p>
-          <p key={`meta-${project.id}`} className="theater-meta">
-            {projectKindLabels[project.kind]} <span aria-hidden="true">·</span>{" "}
-            {projectPeriod(project)}
-          </p>
-          <ul
-            key={`tech-${project.id}`}
-            className="theater-technologies"
-            aria-label="Technologies"
+          {webgl === "failed" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={project.imageUrl ?? placeholderArtwork}
+              alt=""
+              onError={recoverArtwork}
+            />
+          )}
+          <div
+            className={webgl === "failed" ? "theater-screen-info" : "sr-only"}
           >
-            {project.technologies
-              .slice(0, maxTechnologies)
-              .map((technology, index) => (
-                <li
-                  key={`${technology}-${index}`}
-                  style={{ "--i": index } as CSSProperties}
-                >
-                  {technology}
-                </li>
-              ))}
-            {project.technologies.length > maxTechnologies && (
-              <li
-                style={{ "--i": maxTechnologies } as CSSProperties}
-                aria-label={`et ${project.technologies.length - maxTechnologies} autres`}
-              >
-                +{project.technologies.length - maxTechnologies}
-              </li>
-            )}
-          </ul>
+            <p className="theater-screen-kicker">
+              {projectKindLabels[project.kind]}{" "}
+              <span aria-hidden="true">·</span> {projectPeriod(project)}
+            </p>
+            <h3 className="theater-screen-title">{project.title}</h3>
+            <p className="theater-screen-summary">{project.summary}</p>
+          </div>
           <button
             ref={triggerRef}
-            className="pixel-button pixel-button-dark"
+            className="theater-screen-button"
             onClick={() => void openShowcase(active)}
+            onPointerEnter={() => rendererRef.current?.setHovered(true)}
+            onPointerLeave={() => rendererRef.current?.setHovered(false)}
+            onFocus={() => rendererRef.current?.setHovered(true)}
+            onBlur={() => rendererRef.current?.setHovered(false)}
           >
-            Découvrir le projet
-            <PixelArrow />
+            <span
+              className={
+                webgl === "failed"
+                  ? "pixel-button pixel-button-light theater-screen-cta"
+                  : "sr-only"
+              }
+            >
+              Découvrir le projet
+              <span className="sr-only"> {project.title}</span>
+              {webgl === "failed" && <PixelArrow />}
+            </span>
           </button>
         </div>
 
@@ -577,9 +582,9 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
                   aria-current={index === active ? "true" : undefined}
                   onClick={() => scrollToProject(index)}
                 >
+                  <span className="theater-rail-progress" aria-hidden="true" />
                   <span className="theater-rail-index">{pad(index + 1)}</span>
                   <span className="theater-rail-title">{item.title}</span>
-                  <span className="theater-rail-progress" aria-hidden="true" />
                 </button>
               </li>
             ))}

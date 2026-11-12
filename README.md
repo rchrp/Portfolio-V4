@@ -51,10 +51,10 @@ The page reads as one scroll-driven story; its copy lives in `apps/web/src/lib/s
 
 1. **Hero** — interactive pixel matrix, name and contact actions (light, editorial). On load, a short WebGL intro draws the portrait from its edge map on the matrix grid, fills the silhouette, doubles its resolution step by step while shifting from orange to the photo's colors, then hands over to the real image and releases its WebGL context. Contact details and profile links live in `contact` (`apps/web/src/lib/site-content.ts`) and appear once set.
 2. **Manifesto** — after a light-to-night gradient, the statement lights up word by word as you scroll.
-3. **Terminal** — a three.js scene (loaded on demand) with a vintage computer model powers on, boots, and switches channel for each project as the page scrolls. The screen is a 2D canvas texture (a small retro desktop) rendered through a curved-glass shader: barrel distortion, light radial chromatic aberration, scanlines, aperture grille, glitch on channel change, line-then-open power cycle. The shader is applied to the model's own curved glass. A `RectAreaLight` tinted by the displayed image lights the keyboard and desk. Behind the canvas, the pixel matrix redraws the active project from its edge map. Arrow keys, the side rail and previous/next buttons scroll to a given project; each opens an accessible native dialog.
+3. **Terminal** — a three.js scene (loaded on demand) with a large vintage monitor that powers on straight onto the current project and switches channel for each project as the page scrolls. The glass shows each project laid out like the hero of its showcase (picture, blur deepening towards the bottom, kicker, title, summary, role and client), drawn into a 2D canvas, then through a CRT pass (slight barrel distortion, radial chromatic aberration, scanlines, glitch on channel change, line-then-open power cycle) into the texture the glass emits. The glass is a physical material that keeps the model's cloudy base color and the scratches of its roughness map, and reflects a prefiltered environment: a dim room with a window and a setting sun behind the viewer, whose reflection slides across the glass as the camera sways and follows the pointer. The body sees a lighter version of that room, and its metalness is toned down so the lights shape its volume. A `RectAreaLight` tinted by the displayed image lights the desk. Clicking the glass (a transparent button kept over it, also reachable by keyboard) dives into it and opens the project's accessible native dialog. On wide screens a left column holds the active project's mark, redrawn by the pixel matrix from its edge map, and below it the channel list; the projection is shifted so the monitor fills the rest of the width (on narrow screens the list sits at the top and the mark below the monitor). Arrow keys, the channel list and previous/next buttons scroll to a given project.
 4. **Contact** — the monitor switches off and the matrix redraws the portrait from its edge map.
 
-Reduced-motion preferences make power changes and project switches instant and remove glitches, camera drift and blur. Without WebGL, the project image is shown in a CSS monitor frame.
+Reduced-motion preferences make power changes and project switches instant and remove glitches, camera drift and blur. Without WebGL, the project image, title and summary are shown in a CSS monitor frame.
 
 ### Pixel-matrix edge maps
 
@@ -70,7 +70,7 @@ In the projects chapter, the matrix draws the project's **logo** when it has one
 
 ### 3D model
 
-The monitor is a third-party model, adapted for the site by `apps/web/scripts/build-model.mjs`: it removes Sketchfab's backdrop planes, splits the screen glass into its own `Screen` primitive (UVs spanning 0–1, for the CRT shader) and re-encodes textures as WebP (3.9 MB → 0.34 MB). The source stays in `apps/web/assets/models/` (not served); rebuild after changing it:
+The monitor is a third-party model, adapted for the site by `apps/web/scripts/build-model.mjs`: it removes Sketchfab's ground plane and the cable trailing on the floor, bakes the transforms (1.7 units wide, base on y = 0), splits the flat glass into its own `Screen` primitive (it keeps the atlas UVs of its scratches and gains a second UV set spanning 0–1 for the projects), drops the rear faces the camera never sees from its path (back panel, far side of the inner parts; the sides and top stay), simplifies the meshes with meshoptimizer, quantizes them and re-encodes textures as WebP (7.4 MB and 21,900 triangles → 0.57 MB and 4,900 triangles). If the camera path in `crt-renderer.ts` swings wider than about 40° to the side, loosen `hiddenFacing` in the script and rebuild. The source stays in `apps/web/assets/models/` (not served); rebuild after changing it:
 
 ```bash
 pnpm --filter web model
@@ -193,9 +193,9 @@ Objects are written with a one-year immutable `Cache-Control` and saved in the p
 
 The source code of this repository is licensed under the [MIT License](LICENSE). The following assets are **not** covered by the MIT License and keep their own licenses:
 
-- **3D model** — ["Computer Terminal"](https://skfb.ly/6vrwA) by [Chris Sweetwood](https://sketchfab.com/ChrisSweetwood), licensed under [Creative Commons Attribution-ShareAlike 4.0](http://creativecommons.org/licenses/by-sa/4.0/) (CC BY-SA 4.0).
-  - Files: `apps/web/assets/models/computer_terminal.glb` (original) and `apps/web/public/models/computer-terminal.glb` (adapted).
-  - Changes: backdrop planes removed, screen glass split into a separate primitive with remapped UVs, textures resized and converted to WebP. The adapted model is distributed under the same CC BY-SA 4.0 license.
+- **3D model** — ["Monitor III"](https://sketchfab.com/3d-models/monitor-iii-fb119750ac4f4b1e89b4be7c870b4eb2) by [re1monsen](https://sketchfab.com/re1monsen), licensed under [Creative Commons Attribution 4.0](http://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).
+  - Files: `apps/web/assets/models/monitor_iii.glb` (original) and `apps/web/public/models/monitor.glb` (adapted).
+  - Changes: ground plane and floor cable removed, transforms baked and rescaled, screen glass split into a separate primitive with a second UV set, meshes simplified and quantized, textures resized and converted to WebP.
   - The site credits the author in its footer.
 - **3D model** — ["Desk lamp"](https://sketchfab.com/3d-models/desk-lamp-b9458e04d30e4b6284d46d35880a9b95) by [HASSAN](https://sketchfab.com/7ASSAN), licensed under [Creative Commons Attribution 4.0](http://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).
   - Files: `apps/web/assets/models/desk_lamp.glb` (original) and `apps/web/public/models/desk-lamp.glb` (adapted).

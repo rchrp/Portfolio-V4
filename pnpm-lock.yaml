@@ -95,6 +95,9 @@ importers:
       eslint-config-prettier:
         specifier: ^10.1.8
         version: 10.1.8(eslint@9.39.5(jiti@2.7.0))
+      meshoptimizer:
+        specifier: 1.1.1
+        version: 1.1.1
       prettier:
         specifier: ^3.9.6
         version: 3.9.6

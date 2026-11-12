@@ -34,10 +34,10 @@ export const outro = {
 // Third-party assets that require attribution (see README).
 export const credits = {
   model: {
-    title: "Computer Terminal",
-    url: "https://skfb.ly/6vrwA",
-    author: "Chris Sweetwood",
-    license: "CC BY-SA 4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    title: "Monitor III",
+    url: "https://sketchfab.com/3d-models/monitor-iii-fb119750ac4f4b1e89b4be7c870b4eb2",
+    author: "re1monsen",
+    license: "CC BY 4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
   },
 };

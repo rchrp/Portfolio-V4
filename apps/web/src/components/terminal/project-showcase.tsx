@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import type Lenis from "lenis";
 import {
   useEffect,
   useMemo,
@@ -11,6 +12,7 @@ import {
 } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
 import { projectKindLabels, projectPeriod, type Project } from "@/lib/projects";
+import { smoothElementScroll } from "@/lib/smooth-scroll";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
 
 export const placeholderArtwork = "/projects/placeholder.svg";
@@ -69,6 +71,7 @@ export function ProjectShowcase({
   onPrevious: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const smoothRef = useRef<Lenis | null>(null);
   const words = useMemo(
     () => splitWords(project.description),
     [project.description],
@@ -82,9 +85,23 @@ export function ProjectShowcase({
     // React removes it.
   }, []);
 
+  // The showcase glides like the page behind it.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const smooth = smoothElementScroll(dialog);
+    smoothRef.current = smooth;
+    return () => {
+      smooth?.destroy();
+      smoothRef.current = null;
+    };
+  }, []);
+
   // A new project starts from its picture.
   useEffect(() => {
-    dialogRef.current?.scrollTo({ top: 0 });
+    if (smoothRef.current)
+      smoothRef.current.scrollTo(0, { immediate: true, force: true });
+    else dialogRef.current?.scrollTo({ top: 0 });
   }, [project.id]);
 
   const period = projectPeriod(project);

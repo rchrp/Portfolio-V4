@@ -19,6 +19,7 @@ import {
   type JourneyEntry,
 } from "@/lib/journey";
 import { journeyIntro } from "@/lib/journey-content";
+import { scrollPageTo } from "@/lib/smooth-scroll";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
 import type { JourneyScene } from "./journey-scene";
 
@@ -88,18 +89,15 @@ export function JourneyTimeline({ entries }: { entries: JourneyEntry[] }) {
       : [];
   });
 
-  const scrollToStep = useCallback(
-    (index: number, behavior?: ScrollBehavior) => {
-      const section = sectionRef.current;
-      if (!section) return;
-      const top =
-        section.getBoundingClientRect().top +
-        window.scrollY +
-        (index + 1) * window.innerHeight;
-      window.scrollTo({ top, behavior: behavior ?? "smooth" });
-    },
-    [],
-  );
+  const scrollToStep = useCallback((index: number, instant = false) => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const top =
+      section.getBoundingClientRect().top +
+      window.scrollY +
+      (index + 1) * window.innerHeight;
+    scrollPageTo(top, instant);
+  }, []);
 
   useEffect(() => {
     if (mode !== "depth") return;
@@ -132,7 +130,7 @@ export function JourneyTimeline({ entries }: { entries: JourneyEntry[] }) {
         const target = entries.findIndex(
           (entry) => `#${entry.slug}` === window.location.hash,
         );
-        if (target >= 0) scrollToStep(target, "instant");
+        if (target >= 0) scrollToStep(target, true);
       })
       .catch(() => {
         if (!disposed) setFailed(true);

@@ -21,7 +21,7 @@ const manifestPath = path.join(root, "src/lib/edge-maps.json");
 const imagePattern = /\.(png|jpe?g|webp|avif|svg)$/i;
 const workingWidth = 384;
 // Images that also get a light color texture, for the hero's WebGL intro.
-const colorSources = new Set(["/portrait_3_white_bg_wider.png"]);
+const colorSources = new Set(["/portrait.webp"]);
 const colorWidth = 960;
 
 const defaultSources = [
@@ -29,7 +29,7 @@ const defaultSources = [
     .filter((file) => imagePattern.test(file))
     .map((file) => `/projects/${file}`),
   ...seedProjects.map((project) => project.imageUrl),
-  "/portrait_3_white_bg_wider.png",
+  "/portrait.webp",
 ];
 
 const toKey = (source) => {

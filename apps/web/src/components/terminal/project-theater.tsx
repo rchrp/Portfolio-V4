@@ -11,19 +11,17 @@ import {
 } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
 import { PixelMatrix, type FieldRect } from "@/components/pixel-matrix";
+import { useMonitor } from "@/components/monitor-stage";
 import {
   projectKindLabels,
   projectPeriod,
   type ProjectCatalog,
 } from "@/lib/projects";
 import { projectsChapter } from "@/lib/site-content";
+import { holdPageScroll, scrollPageTo } from "@/lib/smooth-scroll";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
-import type {
-  CrtRenderer,
-  ScreenRect,
-  TheaterLayout,
-  TheaterScroll,
-} from "./crt-renderer";
+import type { StageLayout } from "./monitor-path";
+import type { MonitorRenderer, ScreenRect } from "./monitor-renderer";
 import {
   placeholderArtwork,
   ProjectShowcase,
@@ -32,20 +30,19 @@ import {
   type ShowcasePhase,
 } from "./project-showcase";
 import type { ScreenProject } from "./screen-composer";
-
-// Scroll budget, in viewport heights: approaching the monitor, one channel per
-// project, then switching it off.
-const INTRO = 1.1;
-const OUTRO = 0.9;
-
-// Where each channel rests, in viewport heights from the top of the section.
-const channelStop = (index: number) => INTRO + index + 0.35;
+import {
+  channelStop,
+  INTRO,
+  OUTRO,
+  showsProjects,
+  theaterProgress,
+} from "./theater-timeline";
 
 const brandRgb = [241, 90, 36];
-// From the top of the left column on wide screens, large enough to run under
-// the channel list and the edge of the monitor; below the monitor on narrow
-// ones, which would hide anything drawn behind it.
-const sideField: FieldRect = { x: 0.02, y: 0.04, width: 0.4, height: 0.52 };
+// Behind the monitor on wide screens, between the holograms, so that the
+// mark glows around it; below the monitor on narrow ones, which would hide
+// anything drawn behind it.
+const sideField: FieldRect = { x: 0.26, y: 0.04, width: 0.48, height: 0.92 };
 const stackedField: FieldRect = { x: 0.06, y: 0.7, width: 0.88, height: 0.24 };
 
 const clamp = (value: number, minimum: number, maximum: number) =>
@@ -90,11 +87,13 @@ const closeDuration = 700;
 const lockPage = () => {
   document.body.style.overflow = "hidden";
   window.history.scrollRestoration = "manual";
+  holdPageScroll(true);
 };
 
 const unlockPage = () => {
   document.body.style.overflow = "";
   window.history.scrollRestoration = "auto";
+  holdPageScroll(false);
 };
 
 type Showcase = {
@@ -114,18 +113,15 @@ const placeOverGlass = (button: HTMLElement | null, rect: ScreenRect) => {
 
 export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
   const { projects, source } = catalog;
+  const { renderer, status: webgl } = useMonitor();
   const sectionRef = useRef<HTMLElement>(null);
-  const stickyRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<CrtRenderer | null>(null);
-  // The scene loads after the first scroll events: it starts from the last.
-  const scrollRef = useRef<TheaterScroll>({ intro: 0, project: 0, outro: 0 });
+  // The transitions read it when they run, the effects below keep it current.
+  const rendererRef = useRef<MonitorRenderer | null>(null);
   const activeRef = useRef(0);
   const poweredRef = useRef(false);
   const [active, setActive] = useState(0);
   const [powered, setPowered] = useState(false);
-  const [layout, setLayout] = useState<TheaterLayout>("side");
-  const [webgl, setWebgl] = useState<"pending" | "ready" | "failed">("pending");
+  const [layout, setLayout] = useState<StageLayout>("side");
   const [showcase, setShowcase] = useState<Showcase | null>(null);
   // True from the moment the camera starts diving until it is back out.
   const [dived, setDived] = useState(false);
@@ -145,26 +141,27 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     [],
   );
 
-  // What the glass shows: the hero of the project's showcase.
-  const screenProject = useMemo(
-    (): ScreenProject | undefined =>
-      project && {
-        slug: project.slug,
-        title: project.title,
-        summary: project.summary,
-        kicker: [projectKindLabels[project.kind], projectPeriod(project)],
+  // What the glass shows of each project, and its hologram: the hero of its
+  // showcase.
+  const screenProjects = useMemo(
+    (): ScreenProject[] =>
+      projects.map((item, index) => ({
+        slug: item.slug,
+        title: item.title,
+        summary: item.summary,
+        kicker: [projectKindLabels[item.kind], projectPeriod(item)],
         facts: [
-          { label: "Rôle", value: project.role },
-          project.client
-            ? { label: "Client", value: project.client }
-            : { label: "Type", value: project.category },
+          { label: "Rôle", value: item.role },
+          item.client
+            ? { label: "Client", value: item.client }
+            : { label: "Type", value: item.category },
         ],
-        imageUrl: project.imageUrl ?? placeholderArtwork,
-        accentColor: project.accentColor,
-        index: active,
-        total: count,
-      },
-    [project, active, count],
+        imageUrl: item.imageUrl ?? placeholderArtwork,
+        accentColor: item.accentColor,
+        index,
+        total: projects.length,
+      })),
+    [projects],
   );
 
   useEffect(() => {
@@ -177,86 +174,30 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     return () => query.removeEventListener("change", update);
   }, []);
 
-  // The three.js scene is loaded on demand, once the page is interactive.
+  // The page's monitor shows these projects; the button over its glass
+  // follows it.
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const sticky = stickyRef.current;
-    if (!canvas || !sticky || count === 0) return;
-    let disposed = false;
-    let renderer: CrtRenderer | null = null;
-    let resizeObserver: ResizeObserver | null = null;
-    let intersectionObserver: IntersectionObserver | null = null;
-
-    const start = async () => {
-      try {
-        const [{ CrtRenderer }] = await Promise.all([
-          import("./crt-renderer"),
-          document.fonts?.ready,
-        ]);
-        if (disposed) return;
-        const styles = getComputedStyle(document.body);
-        renderer = new CrtRenderer(canvas, {
-          sans: styles.getPropertyValue("--font-geist-sans") || "sans-serif",
-          reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
-            .matches,
-          onScreenRect: (rect) => placeOverGlass(triggerRef.current, rect),
-        });
-        await renderer.load("/models/monitor.glb");
-        if (disposed) {
-          renderer.dispose();
-          return;
-        }
-        rendererRef.current = renderer;
-        renderer.setScroll(scrollRef.current);
-        resizeObserver = new ResizeObserver(([entry]) =>
-          renderer?.resize(entry.contentRect.width, entry.contentRect.height),
-        );
-        resizeObserver.observe(canvas);
-        intersectionObserver = new IntersectionObserver(([entry]) =>
-          renderer?.setActive(entry.isIntersecting),
-        );
-        intersectionObserver.observe(sticky);
-        setWebgl("ready");
-      } catch {
-        renderer?.dispose();
-        renderer = null;
-        if (!disposed) setWebgl("failed");
-      }
-    };
-    void start();
-
+    rendererRef.current = renderer;
+    if (!renderer) return;
+    renderer.setProjects(screenProjects);
+    const stop = renderer.onScreen(({ rect }) =>
+      placeOverGlass(triggerRef.current, rect),
+    );
     return () => {
-      disposed = true;
-      resizeObserver?.disconnect();
-      intersectionObserver?.disconnect();
-      renderer?.dispose();
-      rendererRef.current = null;
+      stop();
+      renderer.setProjects([]);
     };
-  }, [count]);
-
-  useEffect(() => {
-    rendererRef.current?.setLayout(layout);
-  }, [layout, webgl]);
-
-  useEffect(() => {
-    if (screenProject) rendererRef.current?.showProject(screenProject);
-  }, [screenProject, webgl]);
-
-  useEffect(() => {
-    rendererRef.current?.setPower(powered);
-  }, [powered, webgl]);
+  }, [renderer, screenProjects]);
 
   useScrollProgress(sectionRef, ({ offset, viewport }) => {
     if (count === 0) return;
-    const steps = offset / viewport;
-    const intro = clamp(steps / INTRO, 0, 1);
-    const projectPosition = clamp(steps - INTRO, 0, count);
-    const outro = clamp((steps - INTRO - count) / OUTRO, 0, 1);
+    const progress = theaterProgress(offset / viewport, count);
+    const { intro, outro } = progress;
+    const projectPosition = clamp(progress.project, 0, count);
     const index = clamp(Math.floor(projectPosition), 0, count - 1);
-    const shouldPower = intro > 0.55 && outro < 0.45;
+    // Clickable while the glass shows the projects.
+    const shouldPower = showsProjects(progress, count);
 
-    scrollRef.current = { intro, project: projectPosition, outro };
-    rendererRef.current?.setScroll(scrollRef.current);
     const style = sectionRef.current?.style;
     style?.setProperty("--intro", intro.toFixed(4));
     style?.setProperty("--outro", outro.toFixed(4));
@@ -283,13 +224,7 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
         section.getBoundingClientRect().top +
         window.scrollY +
         channelStop(clamp(index, 0, count - 1)) * window.innerHeight;
-      const reduced = window.matchMedia(
-        "(prefers-reduced-motion: reduce)",
-      ).matches;
-      window.scrollTo({
-        top,
-        behavior: instant || reduced ? "auto" : "smooth",
-      });
+      scrollPageTo(top, instant);
     },
     [count],
   );
@@ -464,6 +399,8 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
       data-powered={powered}
       data-webgl={webgl}
       data-dived={dived || undefined}
+      // Read by the page's monitor (see MonitorStage).
+      data-count={count}
       // The arrow keys rest on each channel (see KeyboardNavigation).
       data-nav-stops={projects.map((_, index) => channelStop(index)).join(" ")}
       style={
@@ -473,18 +410,7 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
         } as CSSProperties
       }
     >
-      <div
-        ref={stickyRef}
-        className="theater-sticky"
-        onPointerMove={(event) => {
-          if (event.pointerType !== "mouse") return;
-          const bounds = event.currentTarget.getBoundingClientRect();
-          rendererRef.current?.setPointer(
-            ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
-            ((event.clientY - bounds.top) / bounds.height) * 2 - 1,
-          );
-        }}
-      >
+      <div className="theater-sticky">
         <div className="theater-matrix" aria-hidden="true">
           <PixelMatrix
             color={matrixColor(project.accentColor)}
@@ -503,7 +429,6 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
           />
         </div>
 
-        <canvas ref={canvasRef} className="theater-canvas" aria-hidden="true" />
         <div className="theater-shade" aria-hidden="true" />
 
         <header className="theater-header">

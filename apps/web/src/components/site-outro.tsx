@@ -3,12 +3,13 @@
 import { useRef, useState } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
 import { PixelMatrix, type FieldRect } from "@/components/pixel-matrix";
+import { ScreenControls } from "@/components/screen-controls";
 import { GitHubIcon, LinkedInIcon } from "@/components/social-icons";
 import { edgeMapFor } from "@/lib/edge-maps";
 import { contact, credits, outro } from "@/lib/site-content";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
 
-const portrait = "/portrait_3_white_bg_wider.png";
+const portrait = "/portrait.webp";
 const portraitField: FieldRect = {
   x: 0.42,
   y: 0.04,
@@ -105,6 +106,42 @@ export function SiteOutro() {
           </div>
         )}
       </div>
+      {/* On the home page, the monitor's glass carries the invitation. */}
+      <ScreenControls
+        showing="cta"
+        label={outro.title.join(" ")}
+        controls={[
+          ...(contact.email
+            ? [
+                {
+                  id: "email",
+                  label: `Écrire à ${contact.email}`,
+                  href: `mailto:${contact.email}`,
+                },
+              ]
+            : []),
+          ...(contact.linkedin
+            ? [
+                {
+                  id: "linkedin",
+                  label: "LinkedIn (nouvel onglet)",
+                  href: contact.linkedin,
+                  external: true,
+                },
+              ]
+            : []),
+          ...(contact.github
+            ? [
+                {
+                  id: "github",
+                  label: "GitHub (nouvel onglet)",
+                  href: contact.github,
+                  external: true,
+                },
+              ]
+            : []),
+        ]}
+      />
       <div className="outro-footer">
         <span>© {new Date().getFullYear()} Raphaël Charpentier</span>
         <span className="outro-credits">

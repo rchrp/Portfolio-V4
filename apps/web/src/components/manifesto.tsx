@@ -45,6 +45,7 @@ export function Manifesto() {
   return (
     <section
       ref={sectionRef}
+      id="manifeste"
       className="manifesto"
       aria-labelledby="manifesto-heading"
       // Once the statement and its disciplines are lit (progress ≈ 0.9 of

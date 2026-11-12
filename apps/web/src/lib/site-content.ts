@@ -1,6 +1,19 @@
 // Editorial copy of the single-page story, kept in one place to be edited
 // without touching the components.
 
+// The story's chapters, in page order: `id` is the id of each section.
+export const chapters = [
+  { id: "accueil", label: "Accueil" },
+  { id: "manifeste", label: "Manifeste" },
+  { id: "projets", label: "Projets" },
+  { id: "contact", label: "Contact" },
+];
+
+export const hero = {
+  firstName: "Raphaël",
+  lastName: "Charpentier",
+};
+
 export const manifesto = {
   // Words wrapped in *asterisks* are highlighted with the accent color.
   text: "Le web est rempli de sites qu’on oublie sitôt l’onglet fermé. J’essaie de construire *les autres.*",
@@ -12,7 +25,7 @@ export const manifesto = {
 };
 
 export const projectsChapter = {
-  title: "Le terminal",
+  title: "Mes projets",
   lead: "Une sélection de réalisations, une chaîne à la fois.",
 };
 
@@ -31,11 +44,21 @@ export const outro = {
   lead: "Disponible pour des missions freelance : produits web, interfaces sur mesure et expériences interactives.",
 };
 
+// What the monitor's glass says around the chapters it carries.
+export const monitorCopy = {
+  manifestoKicker: "01 — Manifeste",
+  // Shown as the projects come in.
+  terminal: { kicker: "02", text: "Mes projets" },
+  ctaKicker: "03 — Contact",
+  contactKicker: "Contact",
+  close: "Fermer",
+};
+
 // Third-party assets that require attribution (see README).
 export const credits = {
   model: {
-    title: "Monitor III",
-    url: "https://sketchfab.com/3d-models/monitor-iii-fb119750ac4f4b1e89b4be7c870b4eb2",
+    title: "Monitor IV",
+    url: "https://sketchfab.com/3d-models/monitor-iv-c22e137779e7439b8825bf734de9a471",
     author: "re1monsen",
     license: "CC BY 4.0",
     licenseUrl: "https://creativecommons.org/licenses/by/4.0/",

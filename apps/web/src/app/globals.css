@@ -40,7 +40,7 @@ body {
   --hero-portrait-max-height: min(101.2svh, 77rem);
   --hero-portrait-height: min(
     var(--hero-portrait-max-height),
-    calc(var(--hero-portrait-width) * 2380 / 1792)
+    calc(var(--hero-portrait-width) * 1448 / 1086)
   );
   --hero-portrait-overhang: calc(var(--hero-portrait-height) * 0.1);
   position: relative;
@@ -88,8 +88,26 @@ body {
   height: 100%;
   object-fit: contain;
   object-position: right bottom;
+  /* The cut-out stands in the room: a soft shadow on the wall behind, as if
+     lit from the upper left, and a closer one along its edges. */
+  filter: drop-shadow(1.4rem 1rem 2.4rem rgba(58, 40, 26, 0.14))
+    drop-shadow(0.15rem 0.25rem 0.5rem rgba(17, 17, 14, 0.07));
   -webkit-mask-image: linear-gradient(to bottom, #000 90%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 90%, transparent 100%);
+}
+
+/* A faint pool of warm light behind the portrait. */
+.hero-portrait::before {
+  position: absolute;
+  z-index: -1;
+  inset: 6% -4% 0 14%;
+  content: "";
+  background: radial-gradient(
+    ellipse 50% 46% at 52% 48%,
+    rgba(238, 232, 221, 0.7),
+    rgba(255, 255, 255, 0) 72%
+  );
+  pointer-events: none;
 }
 
 .hero-topline {
@@ -997,6 +1015,87 @@ body {
    02 — The terminal: projects on a CRT, one channel per project
    ------------------------------------------------------------------------ */
 
+/* The monitor that follows the story: one canvas over the whole page, which
+   lets clicks through to the chapters below. */
+.monitor-stage {
+  position: fixed;
+  z-index: 3;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+
+.monitor-stage[data-status="ready"] {
+  opacity: 1;
+}
+
+.monitor-stage[data-status="failed"] {
+  display: none;
+}
+
+/* The monitor's glass carries the name, the statement and the invitation:
+   their HTML stays for assistive technologies, invisible, its links giving
+   way to the ones over the glass. It shows if WebGL fails, or while the
+   monitor is slow to load. */
+.monitor-page:is([data-monitor="pending"], [data-monitor="ready"])
+  :is(
+    .hero-title,
+    .manifesto-text,
+    .manifesto-disciplines,
+    .outro-title,
+    .outro-lead
+  ) {
+  opacity: 0;
+}
+
+.monitor-page[data-monitor="ready"]
+  :is(
+    .hero-title,
+    .manifesto-text,
+    .manifesto-disciplines,
+    .outro-title,
+    .outro-lead
+  ) {
+  transition: opacity 600ms ease;
+}
+
+.monitor-page:is([data-monitor="pending"], [data-monitor="ready"])
+  :is(.hero-actions, .outro-actions) {
+  visibility: hidden;
+}
+
+/* Opened onto the contact details, the monitor has the hero to itself. */
+.hero-portrait {
+  transition: opacity 600ms ease;
+}
+
+.portfolio-hero:has(.screen-controls[data-showing="contact"]) .hero-portrait {
+  opacity: 0;
+}
+
+/* Real links and buttons over the regions of the glass (see
+   ScreenControls): the glass draws and lights them, they take the clicks
+   and the focus. */
+.screen-control {
+  position: fixed;
+  z-index: 5;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0.75rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.screen-control:focus-visible {
+  outline: 2px solid #ff935d;
+  outline-offset: 3px;
+}
+
 .theater {
   --intro: 0;
   --outro: 0;
@@ -1032,15 +1131,6 @@ body {
   );
 }
 
-.theater-canvas {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  opacity: calc(0.2 + var(--intro) * 1.6);
-}
-
 .theater-shade {
   position: absolute;
   inset: 0;
@@ -1064,6 +1154,18 @@ body {
   max-width: 34rem;
   /* Faded out, it still lies over the glass's corner. */
   pointer-events: none;
+}
+
+/* The glass announces the projects itself: the heading stays for assistive
+   technologies, and shows without WebGL. */
+.theater:not([data-webgl="failed"]) .theater-header {
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .theater-heading,
@@ -1114,20 +1216,22 @@ body {
     visibility 0s linear 400ms;
 }
 
-/* The channel list: on wide screens, under the project's mark, left of the
-   monitor. */
+/* The channel list: on wide screens, centred under the monitor, between the
+   holograms. */
 .theater-rail {
   position: absolute;
   z-index: 2;
-  top: 36%;
-  left: var(--page-gutter);
-  display: grid;
-  justify-items: start;
+  bottom: clamp(1.25rem, 4.5svh, 2.75rem);
+  left: 50%;
+  display: flex;
+  align-items: center;
   gap: 0.75rem;
+  translate: -50% 0;
 }
 
 .theater-rail ol {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: 0.15rem;
   margin: 0;
   padding: 0;
@@ -1346,13 +1450,12 @@ body {
   .theater-rail {
     top: clamp(1rem, 4svh, 2.5rem);
     right: var(--page-gutter);
+    bottom: auto;
     left: auto;
-    grid-auto-flow: column;
-    align-items: center;
+    translate: none;
   }
 
   .theater-rail ol {
-    grid-auto-flow: column;
     gap: 0.5rem;
   }
 
@@ -2487,14 +2590,10 @@ body {
       view-timeline-name: --theater;
     }
 
-    :is(.theater-canvas, .theater-matrix, .theater-header) {
+    :is(.theater-matrix, .theater-header) {
       animation: parallax linear both;
       animation-timeline: --theater;
       animation-range: entry 0% entry 100%;
-    }
-
-    .theater-canvas {
-      --parallax-from: -28svh;
     }
 
     .theater-matrix {
@@ -2527,6 +2626,269 @@ body {
     .outro-title span + span {
       --parallax-from: 16svh;
     }
+  }
+}
+
+/* ------------------------------------------------------------------------
+   Film grain: the chapters, their matrices and the monitor share one fine,
+   moving grain, as if played from the same tape. Its light specks vanish on
+   white: through the night transition, it fades in with the dark.
+   ------------------------------------------------------------------------ */
+
+.monitor-grain,
+:is(.journey-page .outro, .showcase)::after,
+.journey[data-mode="depth"] .journey-sticky::before {
+  position: absolute;
+  z-index: 4;
+  /* Room for the jitter below. */
+  inset: -4rem;
+  content: "";
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='176' height='176'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .93 0 0 0 0 .91 0 0 0 0 .85 3 0 0 0 -1.35'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E")
+    0 0 / 11rem;
+  opacity: 0.07;
+  pointer-events: none;
+}
+
+/* Over the home page and its monitor, which crosses every chapter. */
+.monitor-grain {
+  position: fixed;
+}
+
+/* The showcase scrolls: its grain stays on the screen, over the bar. */
+.showcase::after {
+  position: fixed;
+  z-index: 6;
+}
+
+/* A new frame every tenth of a second, shifted at random. */
+@keyframes film-grain {
+  0% {
+    transform: translate(0, 0);
+  }
+
+  10% {
+    transform: translate(-1.5rem, 1rem);
+  }
+
+  20% {
+    transform: translate(1rem, -2rem);
+  }
+
+  30% {
+    transform: translate(-2.5rem, -0.5rem);
+  }
+
+  40% {
+    transform: translate(2rem, 2.5rem);
+  }
+
+  50% {
+    transform: translate(-0.5rem, -2.5rem);
+  }
+
+  60% {
+    transform: translate(2.5rem, 0.5rem);
+  }
+
+  70% {
+    transform: translate(-2rem, 2rem);
+  }
+
+  80% {
+    transform: translate(0.5rem, -1rem);
+  }
+
+  90% {
+    transform: translate(-1rem, 2.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .monitor-grain,
+  :is(.journey-page .outro, .showcase)::after,
+  .journey[data-mode="depth"] .journey-sticky::before {
+    animation: film-grain 1s steps(1) infinite;
+  }
+}
+
+/* ------------------------------------------------------------------------
+   Story rail: where the story stands, from the first night chapter on. In
+   the bottom right corner, clear of the monitor and its holograms.
+   ------------------------------------------------------------------------ */
+
+.story-rail {
+  position: fixed;
+  z-index: 20;
+  right: clamp(0.75rem, 1.6vw, 1.75rem);
+  bottom: clamp(4.5rem, 11svh, 7rem);
+  color: var(--phosphor);
+  text-shadow: 0 0 0.75rem var(--night);
+  transition: opacity 400ms ease;
+}
+
+/* Hidden over the hero, and while the camera dives into the monitor. */
+.story-rail:not([data-visible]),
+main:has(.theater[data-dived]) :is(.story-rail, .story-osd) {
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 400ms ease,
+    visibility 0s linear 400ms;
+}
+
+.story-rail ol {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.story-rail a {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7rem;
+  min-height: 2rem;
+  padding-left: 0.75rem;
+  color: var(--phosphor-dim);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  transition: color 200ms ease;
+}
+
+.story-rail a:is(:hover, :focus-visible),
+.story-rail a[aria-current="true"] {
+  color: var(--phosphor);
+}
+
+.story-rail a:focus-visible {
+  outline: 2px solid #ff935d;
+  outline-offset: 2px;
+}
+
+/* The names unfold when the pointer or the focus reaches the rail. */
+.story-rail-label {
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: nowrap;
+  transition:
+    max-width 500ms var(--hero-ease),
+    opacity 300ms ease;
+}
+
+.story-rail:is(:hover, :focus-within) .story-rail-label {
+  max-width: 8rem;
+  opacity: 1;
+}
+
+.story-rail-progress {
+  position: relative;
+  width: 0.9rem;
+  height: 1px;
+  overflow: hidden;
+  background: var(--phosphor-line);
+  transition: width 500ms var(--hero-ease);
+}
+
+.story-rail-progress::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.story-rail a[aria-current="true"] .story-rail-progress {
+  width: 2.25rem;
+}
+
+.story-rail a[aria-current="true"] .story-rail-progress::after {
+  transform: scaleX(var(--chapter-progress, 0));
+}
+
+/* Entering a chapter flashes its number and name at the top, like the
+   on-screen display of an old television, then lets it go. */
+.story-osd {
+  position: fixed;
+  z-index: 20;
+  top: clamp(1.25rem, 4svh, 2.5rem);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--phosphor);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  line-height: 1;
+  text-shadow:
+    0 0 0.15rem #ece8da,
+    0 0 0.9rem #ece8da80;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0;
+  translate: -50% 0;
+  animation: story-osd 2.6s linear both;
+}
+
+.story-osd-index {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: clamp(1.75rem, 2.6vw, 2.6rem);
+  letter-spacing: 0.04em;
+}
+
+/* The tape plays. */
+.story-osd-index::before {
+  width: 0.42em;
+  height: 0.5em;
+  content: "";
+  background: var(--accent);
+  box-shadow: 0 0 0.6rem var(--accent);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+
+.story-osd-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.24em;
+}
+
+@keyframes story-osd {
+  0%,
+  6% {
+    opacity: 1;
+  }
+
+  3%,
+  9% {
+    opacity: 0.35;
+  }
+
+  12%,
+  80% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Phones and narrow windows keep the screen to the story itself. */
+@media (max-width: 52rem), (max-aspect-ratio: 4/5) {
+  .story-rail,
+  .story-osd {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-osd {
+    display: none;
   }
 }
 

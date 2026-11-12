@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { JourneyTimeline } from "@/components/journey/journey-timeline";
 import { KeyboardNavigation } from "@/components/keyboard-navigation";
 import { SiteOutro } from "@/components/site-outro";
+import { SmoothScroll } from "@/components/smooth-scroll";
 import { getJourney } from "@/lib/journey-catalog";
 import { lampCredit } from "@/lib/journey-content";
 
@@ -42,6 +43,7 @@ export default async function JourneyPage() {
       </p>
       <SiteOutro />
       <KeyboardNavigation />
+      <SmoothScroll />
     </main>
   );
 }

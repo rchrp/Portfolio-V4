@@ -1,19 +1,29 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
-import { ScreenComposer, type ScreenProject } from "./screen-composer";
+import { HologramDeck, type GlassFrame } from "./holograms";
+import {
+  ease,
+  poseAt,
+  storyStart,
+  type Pose,
+  type StageLayout,
+  type StoryScroll,
+} from "./monitor-path";
+import {
+  loadImage,
+  ScreenComposer,
+  type ScreenMessage,
+  type ScreenProject,
+  type ScreenRegion,
+} from "./screen-composer";
+import type {
+  ContactCard,
+  CtaCard,
+  HeroCard,
+  ManifestoCard,
+} from "./screen-cards";
 import { createSunsetEnvironments } from "./sunset-environment";
-
-export type TheaterScroll = {
-  /** 0 → 1 while the camera approaches the switched-off monitor. */
-  intro: number;
-  /** Continuous project position: 1.5 is halfway through the second project. */
-  project: number;
-  /** 0 → 1 while the camera pulls back after the last project. */
-  outro: number;
-};
-
-export type TheaterLayout = "side" | "stacked";
+import { showsProjects } from "./theater-timeline";
 
 /** Bounds of the glass on the canvas, in CSS pixels. */
 export type ScreenRect = {
@@ -21,6 +31,23 @@ export type ScreenRect = {
   top: number;
   width: number;
   height: number;
+};
+
+/** What the glass shows in each chapter, besides the projects. */
+export type MonitorScreens = {
+  hero: HeroCard;
+  contact: ContactCard;
+  manifesto: ManifestoCard;
+  terminal: ScreenMessage;
+  cta: CtaCard;
+};
+
+/** Where the glass and its clickable regions are on the canvas. */
+export type ScreenFrame = {
+  /** What it shows: "project", "message", or a card's kind. */
+  showing: string;
+  rect: ScreenRect;
+  regions: Record<string, ScreenRect>;
 };
 
 const crtVertex = /* glsl */ `
@@ -102,8 +129,11 @@ const crtFragment = /* glsl */ `
 
     // 240 lines: coarse enough not to shimmer once the texture is minified.
     color *= mix(1.0, 0.92 + 0.08 * sin(powered.y * 480.0 * 3.14159), crt);
-    float grain = hash(powered * vec2(1152.0, 768.0) + fract(uTime) * 91.0);
-    color = mix(color, vec3(grain), (0.025 + glitch * 0.4) * crt);
+    float grain = hash(powered * vec2(1296.0, 768.0) + fract(uTime) * 91.0);
+    // The grain rides on the light, so the blacks stay black, except in a
+    // channel switch's snow.
+    color *= 1.0 + (grain - 0.5) * 0.1 * crt;
+    color = mix(color, vec3(grain), glitch * 0.4);
     color *= mix(1.0, 0.985 + 0.015 * sin(uTime * 110.0), crt);
 
     vec2 edge = smoothstep(vec2(0.0), vec2(0.004, 0.006), powered)
@@ -121,7 +151,9 @@ const crtFragment = /* glsl */ `
   }
 `;
 
-function radialTexture(inner: string, outer: string, size = 256) {
+// A halo around the glass, clear over the glass itself (the inner share of
+// the plane it is drawn on), so the tube's blacks stay deep.
+function haloTexture(size = 256) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -135,8 +167,10 @@ function radialTexture(inner: string, outer: string, size = 256) {
     size / 2,
     size / 2,
   );
-  gradient.addColorStop(0, inner);
-  gradient.addColorStop(1, outer);
+  gradient.addColorStop(0, "rgba(255,255,255,0)");
+  gradient.addColorStop(0.36, "rgba(255,255,255,0)");
+  gradient.addColorStop(0.5, "rgba(255,255,255,0.8)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
   return new THREE.CanvasTexture(canvas);
@@ -145,8 +179,6 @@ function radialTexture(inner: string, outer: string, size = 256) {
 const damp = (current: number, target: number, lambda: number, delta: number) =>
   THREE.MathUtils.lerp(current, target, 1 - Math.exp(-lambda * delta));
 
-const ease = (value: number) => value * value * (3 - 2 * value);
-
 const easeInOutCubic = (value: number) =>
   value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
 
@@ -154,47 +186,36 @@ const smoothstep = (edge0: number, edge1: number, value: number) =>
   ease(THREE.MathUtils.clamp((value - edge0) / (edge1 - edge0), 0, 1));
 
 const diveDuration = 1750;
+// The monitor rises into place once loaded.
+const appearDuration = 1600;
 // Longest side of the picture texture shown once inside the screen.
 const focusResolution = 2560;
-// Share of the viewport the glass may fill, in height and in width.
-const framing: Record<TheaterLayout, { height: number; width: number }> = {
-  side: { height: 0.7, width: 0.645 },
-  stacked: { height: 0.5, width: 0.9 },
-};
-// Share of the width kept on the left of wide screens for the project's mark
-// and the channel list: the monitor is centred on the rest.
-const leftColumn: Record<TheaterLayout, number> = { side: 0.24, stacked: 0 };
 // Strength of the glass's reflections, faded out while diving into it.
 const glassReflection = 1.4;
 // Scales the roughness map: clean glass mirrors the window sharply, its
-// scratches and smudges blur it.
+// smudges blur it.
 const glassRoughness = 0.6;
-// The body's map makes most of it a dark, rough metal, which shows little
-// more than black in a dim room: toned down, the lights shape its volume.
-const bodyMetalness = 0.35;
-// On power-on, the project scans in once the tube's line has opened.
+// Lit like a matte surface, the glass's base color would turn its blacks
+// grey: it stays dark, the tube's light and the reflections do the rest.
+const glassDiffuse = 0.12;
+// On power-on, the picture scans in once the tube's line has opened.
 const powerOnDelay = 350;
-// Resting view, as offsets from the glass's normal: a little to the right and
-// above, so the monitor turns towards the left column and its right side
-// shows.
-const restingView = { across: 0.15, along: 0.08 };
-// Where the approach starts: about 40° to the right and above, the side of
-// the body in full view.
-const introView = { across: 0.85, along: 0.34 };
-// Where the window's reflection is centred on the glass from that view, in
-// the same units: up and to the left, the window being behind the viewer.
-const windowReflection = { across: -0.16, along: 0.12 };
+// The window whose reflection crosses the glass: behind the visitor, up and
+// to the left, the sun setting behind it.
+const windowDirection = new THREE.Vector3(-0.3, 0.06, 1).normalize();
+// How fast the monitor catches up with its pose, per second.
+const follow = 7;
 
-function loadFocusImage(src: string) {
-  return new Promise<HTMLImageElement | null>((resolve) => {
-    const image = new Image();
-    if (!src.startsWith("/")) image.crossOrigin = "anonymous";
-    image.decoding = "async";
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
-    image.src = src;
-  });
-}
+const poseKeys = [
+  "x",
+  "y",
+  "size",
+  "width",
+  "yaw",
+  "pitch",
+  "roll",
+  "float",
+] as const;
 
 type Dive = {
   from: number;
@@ -203,10 +224,22 @@ type Dive = {
   resolve: () => void;
 };
 
-export class CrtRenderer {
+type ScreenContent = {
+  key: string;
+  show: (now: number, instant: boolean) => void;
+};
+
+/**
+ * The monitor of the home page, drawn on a canvas covering the viewport. The
+ * camera stays put while the monitor moves through the story, from pose to
+ * pose; its glass shows a few words between chapters and the projects in
+ * their chapter, where the holograms of those to come float around it.
+ */
+export class MonitorRenderer {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(26, 1, 0.1, 60);
+  private readonly camera = new THREE.PerspectiveCamera(26, 1, 0.1, 80);
+  private readonly monitor = new THREE.Group();
   private readonly composer: ScreenComposer;
   private readonly screenTexture: THREE.CanvasTexture;
   // The CRT pass draws the composer's canvas, through the tube's effects,
@@ -215,68 +248,87 @@ export class CrtRenderer {
   private readonly crtScene = new THREE.Scene();
   private readonly crtCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly crtTarget: THREE.WebGLRenderTarget;
-  private readonly screenLight: THREE.RectAreaLight;
   private readonly glow: THREE.Mesh<
     THREE.PlaneGeometry,
     THREE.MeshBasicMaterial
   >;
+  private readonly holograms: HologramDeck;
   private glassMaterial: THREE.MeshStandardMaterial | null = null;
   private bodyMaterial: THREE.MeshStandardMaterial | null = null;
   private model: THREE.Object3D | null = null;
   private environments: { glass: THREE.Texture; body: THREE.Texture } | null =
     null;
-  // The glass's frame, measured on the model: it is flat and leans back.
+  // The glass's frame in the monitor's own space, measured on the model.
   private readonly glassCenter = new THREE.Vector3();
   private readonly glassNormal = new THREE.Vector3(0, 0, 1);
   private readonly glassUp = new THREE.Vector3(0, 1, 0);
   private readonly glassRight = new THREE.Vector3(1, 0, 0);
-  private glassWidth = 1.5;
-  private glassHeight = 1;
-  private readonly cameraPosition = new THREE.Vector3();
-  private readonly cameraTarget = new THREE.Vector3();
-  private cameraPlaced = false;
-  private readonly viewDirection = new THREE.Vector3();
-  private readonly lookTarget = new THREE.Vector3();
-  private readonly divePosition = new THREE.Vector3();
-  private readonly look = new THREE.Vector3();
-  private readonly corner = new THREE.Vector3();
-  private readonly lightColor = new THREE.Color(1, 1, 1);
-  private screenRect: ScreenRect = { left: 0, top: 0, width: 0, height: 0 };
-  private readonly onScreenRect: (rect: ScreenRect) => void;
+  private readonly glassOrientation = new THREE.Quaternion();
+  private glassWidth = 1.4;
+  private glassHeight = 0.82;
+  // ... and in the world, after each move.
+  private readonly glass: GlassFrame = {
+    center: new THREE.Vector3(),
+    normal: new THREE.Vector3(0, 0, 1),
+    up: new THREE.Vector3(0, 1, 0),
+    quaternion: new THREE.Quaternion(),
+    width: 1.4,
+    height: 0.82,
+    distance: 5,
+  };
+  private pose: Pose = poseAt(storyStart, "side");
+  private posePlaced = false;
+  private readonly screens: MonitorScreens;
+  private projects: ScreenProject[] = [];
+  private story: StoryScroll = storyStart;
+  private layout: StageLayout = "side";
+  private readonly pointer = { x: 0, y: 0, smoothX: 0, smoothY: 0 };
+  // The hero's card opened onto the contact details.
+  private contactOpen = false;
+  private width = 1;
+  private height = 1;
+  private frame = 0;
+  private lastTime = 0;
+  private held = false;
+  private loadedAt = -Infinity;
+  private power = 0;
+  private powerTarget = 0;
+  private glitch = 0;
+  // A small recoil as a hologram lands in the glass.
+  private kick = 0;
+  private contentKey = "off";
+  private pending: { show: ScreenContent["show"]; at: number } | null = null;
   private dive: Dive | null = null;
   /** 0 in the room, 1 inside the glass with the picture filling the view. */
   private diveProgress = 0;
   private focusTexture: THREE.Texture | null = null;
   private focusSize = { width: 1, height: 1 };
   private focusSource: string | null = null;
-  private held = false;
+  private screenFrame: ScreenFrame = {
+    showing: "off",
+    rect: { left: 0, top: 0, width: 0, height: 0 },
+    regions: {},
+  };
+  private readonly screenListeners = new Set<(frame: ScreenFrame) => void>();
+  // The regions last reported, to tell when the card was redrawn.
+  private reportedRegions: ScreenRegion[] = [];
   private readonly disposables: { dispose(): void }[] = [];
-  private scroll: TheaterScroll = { intro: 0, project: 0, outro: 0 };
-  private layout: TheaterLayout = "side";
-  private pointer = { x: 0, y: 0, smoothX: 0, smoothY: 0 };
-  private width = 1;
-  private height = 1;
-  private frame = 0;
-  private running = false;
-  private lastTime = 0;
-  private power = 0;
-  private powerTarget = 0;
-  private glitch = 0;
-  private pendingProject: { project: ScreenProject; at: number } | null = null;
-  private queuedProject: ScreenProject | null = null;
   private readonly reducedMotion: boolean;
+  private readonly euler = new THREE.Euler();
+  private readonly offset = new THREE.Vector3();
+  private readonly forward = new THREE.Vector3(0, 0, -1);
+  private readonly worldUp = new THREE.Vector3(0, 1, 0);
+  private readonly divePosition = new THREE.Vector3();
+  private readonly look = new THREE.Vector3();
+  private readonly corner = new THREE.Vector3();
+  private readonly lightColor = new THREE.Color(1, 1, 1);
 
   constructor(
     canvas: HTMLCanvasElement,
-    options: {
-      sans: string;
-      reducedMotion: boolean;
-      /** Called whenever the glass moves on the canvas. */
-      onScreenRect: (rect: ScreenRect) => void;
-    },
+    options: { sans: string; reducedMotion: boolean; screens: MonitorScreens },
   ) {
     this.reducedMotion = options.reducedMotion;
-    this.onScreenRect = options.onScreenRect;
+    this.screens = options.screens;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -286,9 +338,6 @@ export class CrtRenderer {
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    RectAreaLightUniformsLib.init();
 
     this.composer = new ScreenComposer({ sans: options.sans });
     this.screenTexture = new THREE.CanvasTexture(this.composer.canvas);
@@ -334,11 +383,11 @@ export class CrtRenderer {
     crtQuad.frustumCulled = false;
     this.crtScene.add(crtQuad);
 
-    this.screenLight = new THREE.RectAreaLight(0xffffff, 0, 1, 1);
+    // The tube's light, blooming past the glass.
     this.glow = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({
-        map: radialTexture("rgba(255,255,255,0.9)", "rgba(255,255,255,0)"),
+        map: haloTexture(),
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,
@@ -346,8 +395,21 @@ export class CrtRenderer {
         toneMapped: false,
       }),
     );
+    this.monitor.add(this.glow);
+    this.holograms = new HologramDeck(this.renderer, options.sans);
+    this.scene.add(this.monitor, this.holograms.group);
 
-    this.buildStage();
+    // Warm from the upper left, an orange rim from behind on the right.
+    const key = new THREE.DirectionalLight(0xffdcc0, 2.6);
+    key.position.set(-3, 4, 4);
+    const rim = new THREE.DirectionalLight(0xff8a4c, 2.4);
+    rim.position.set(3, 2.5, -4);
+    this.scene.add(
+      key,
+      rim,
+      new THREE.HemisphereLight(0x8a9ab4, 0x16110d, 0.6),
+    );
+
     this.disposables.push(
       this.screenTexture,
       this.crtTarget,
@@ -356,12 +418,13 @@ export class CrtRenderer {
       this.glow.geometry,
       this.glow.material,
       this.glow.material.map!,
+      this.holograms,
     );
   }
 
   /**
-   * Loads the monitor: "Monitor III" by re1monsen (CC BY 4.0), prepared by
-   * `scripts/build-model.mjs`, whose "Screen" primitive is the glass.
+   * Loads the monitor: "Monitor IV" by re1monsen (CC BY 4.0), prepared by
+   * `scripts/build-model.mjs`, whose "Screen" material covers the glass.
    */
   async load(url: string) {
     const { scene: model } = await new GLTFLoader().loadAsync(url);
@@ -376,16 +439,30 @@ export class CrtRenderer {
 
     for (const mesh of meshes) {
       if (mesh === glass) continue;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
       const material = mesh.material as THREE.MeshStandardMaterial;
-      material.metalness = bodyMetalness;
-      // Its emissive map holds the front panel's printed labels.
+      // Its emissive map holds the printed labels and the rear light.
       if (material.emissiveMap) this.bodyMaterial = material;
     }
+    // The bezel's knurling stays sharp when the monitor turns away.
+    const anisotropy = Math.min(
+      8,
+      this.renderer.capabilities.getMaxAnisotropy(),
+    );
+    for (const mesh of meshes) {
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      for (const texture of [
+        material.map,
+        material.normalMap,
+        material.roughnessMap,
+        material.metalnessMap,
+        material.aoMap,
+      ]) {
+        if (texture) texture.anisotropy = anisotropy;
+      }
+    }
 
-    // The glass keeps its cloudy base color and the scratches of its
-    // roughness map, and emits the CRT pass through its second UV set.
+    // The glass keeps its base color and the smudges of its roughness map,
+    // and emits the CRT pass through its second UV set.
     const glassMaterial = glass.material as THREE.MeshStandardMaterial;
     glassMaterial.metalness = 0;
     glassMaterial.metalnessMap = null;
@@ -399,50 +476,30 @@ export class CrtRenderer {
 
     model.updateMatrixWorld(true);
     this.measureGlass(glass);
-    this.scene.add(model);
+    this.monitor.add(model);
     this.model = model;
 
-    const { glassCenter, glassNormal, glassWidth, glassHeight } = this;
-    this.screenLight.width = glassWidth;
-    this.screenLight.height = glassHeight;
-    this.screenLight.position
-      .copy(glassCenter)
-      .addScaledVector(glassNormal, 0.01);
-    this.screenLight.lookAt(
-      this.look.copy(glassCenter).addScaledVector(glassNormal, 10),
-    );
-    this.glow.position.copy(glassCenter).addScaledVector(glassNormal, 0.14);
-    this.glow.lookAt(
-      this.look.copy(glassCenter).addScaledVector(glassNormal, 1),
-    );
-    this.glow.scale.set(glassWidth * 2.4, glassHeight * 2.6, 1);
+    this.glow.position
+      .copy(this.glassCenter)
+      .addScaledVector(this.glassNormal, 0.14);
+    this.glow.quaternion.copy(this.glassOrientation);
+    this.glow.scale.set(this.glassWidth * 2.4, this.glassHeight * 2.6, 1);
 
-    // A mirror sends the view back symmetrically: offset the window from the
-    // reflection's position by the viewer's own offset.
-    const towards = glassNormal
-      .clone()
-      .addScaledVector(
-        this.glassRight,
-        windowReflection.across - restingView.across,
-      )
-      .addScaledVector(
-        this.glassUp,
-        windowReflection.along - restingView.along,
-      );
     const environments = createSunsetEnvironments(
       this.renderer,
-      towards,
-      new THREE.Vector3(0, 1, 0),
+      windowDirection,
+      this.worldUp,
     );
     this.environments = environments;
     this.scene.environment = environments.body;
     this.scene.environmentIntensity = 1;
     glassMaterial.envMap = environments.glass;
     glassMaterial.envMapIntensity = glassReflection;
+    this.loadedAt = performance.now();
     this.wake();
   }
 
-  /** Centre, axes and size of the flat glass, in world space. */
+  /** Centre, axes and size of the glass, in the monitor's own space. */
   private measureGlass(glass: THREE.Mesh) {
     const positions = glass.geometry.getAttribute("position");
     const normals = glass.geometry.getAttribute("normal");
@@ -457,6 +514,13 @@ export class CrtRenderer {
     this.glassNormal.copy(facing.normalize());
     this.glassUp.crossVectors(this.glassNormal, this.glassRight).normalize();
     this.glassRight.crossVectors(this.glassUp, this.glassNormal).normalize();
+    this.glassOrientation.setFromRotationMatrix(
+      new THREE.Matrix4().makeBasis(
+        this.glassRight,
+        this.glassUp,
+        this.glassNormal,
+      ),
+    );
 
     const across = { min: Infinity, max: -Infinity };
     const along = { min: Infinity, max: -Infinity };
@@ -480,54 +544,29 @@ export class CrtRenderer {
       .multiplyScalar((across.min + across.max) / 2)
       .addScaledVector(this.glassUp, (along.min + along.max) / 2)
       .addScaledVector(this.glassNormal, depth / positions.count);
+    this.glass.width = this.glassWidth;
+    this.glass.height = this.glassHeight;
   }
 
-  private buildStage() {
-    this.scene.add(this.screenLight, this.glow);
-
-    // Desk that fades into the matrix wall behind the canvas.
-    const deskAlpha = radialTexture("#ffffff", "#000000", 512);
-    const desk = new THREE.Mesh(
-      new THREE.PlaneGeometry(9, 9),
-      new THREE.MeshStandardMaterial({
-        color: 0x17130f,
-        roughness: 0.82,
-        alphaMap: deskAlpha,
-        transparent: true,
-      }),
-    );
-    desk.rotation.x = -Math.PI / 2;
-    desk.receiveShadow = true;
-    this.scene.add(desk);
-    this.disposables.push(desk.geometry, desk.material, deskAlpha);
-
-    // Bright enough for the body's dark blue-grey to show its volume.
-    const key = new THREE.SpotLight(0xffdcc0, 75, 0, 0.42, 0.85, 2);
-    key.position.set(-3.1, 4.4, 3.4);
-    key.target.position.set(0, 0.6, 0.2);
-    key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
-    key.shadow.bias = -0.0004;
-    key.shadow.radius = 6;
-    this.scene.add(key, key.target);
-
-    const rim = new THREE.DirectionalLight(0xff8a4c, 3.2);
-    rim.position.set(2.6, 2.4, -3.6);
-    this.scene.add(rim);
-    this.scene.add(new THREE.HemisphereLight(0x8a9ab4, 0x16110d, 0.6));
-  }
-
-  setLayout(layout: TheaterLayout) {
+  setLayout(layout: StageLayout) {
     this.layout = layout;
     this.composer.setLayout(layout === "stacked" ? "compact" : "wide");
     this.wake();
   }
 
-  setScroll(scroll: TheaterScroll) {
-    this.scroll = scroll;
+  setStory(story: StoryScroll) {
+    this.story = story;
     this.wake();
   }
 
+  /** The projects shown on the glass, in their order on the page. */
+  setProjects(projects: ScreenProject[]) {
+    this.projects = projects;
+    this.holograms.setProjects(projects);
+    this.wake();
+  }
+
+  /** The pointer, from −1 to 1 across the viewport. */
   setPointer(x: number, y: number) {
     this.pointer.x = x;
     this.pointer.y = y;
@@ -540,43 +579,41 @@ export class CrtRenderer {
     this.wake();
   }
 
-  /** Powers the tube on, straight onto the current project, or off. */
-  setPower(on: boolean) {
-    if (this.powerTarget === (on ? 1 : 0)) return;
-    this.powerTarget = on ? 1 : 0;
-    if (on && this.queuedProject) {
-      this.composer.showProject(
-        this.queuedProject,
-        performance.now() + powerOnDelay,
-        this.reducedMotion,
-      );
-    }
+  /** Opens the hero's card onto the contact details, or closes it. */
+  setContactOpen(open: boolean) {
+    this.contactOpen = open;
     this.wake();
   }
 
-  showProject(project: ScreenProject) {
-    const previous = this.queuedProject;
-    this.queuedProject = project;
-    if (this.powerTarget === 0 || previous?.slug === project.slug) return;
-    // Inside the glass the channel switches cleanly.
-    if (this.reducedMotion || this.diveProgress > 0) {
-      this.composer.showProject(project, performance.now(), true);
-    } else {
-      // Tear the picture first, swap channels at the peak of the glitch.
-      this.glitch = 1;
-      this.pendingProject = { project, at: performance.now() + 110 };
-    }
+  /** Lights up a region of the card, under the pointer or the focus. */
+  setHighlight(id: string | null) {
+    this.composer.setHighlight(id);
     this.wake();
+  }
+
+  /** Marks a copy button of the card as done, or clears it. */
+  setCopied(id: string | null) {
+    this.composer.setCopied(id);
+    this.wake();
+  }
+
+  /**
+   * Follows the glass and the regions of its card on the canvas; returns the
+   * function that stops.
+   */
+  onScreen(listener: (frame: ScreenFrame) => void) {
+    this.screenListeners.add(listener);
+    listener(this.screenFrame);
+    return () => {
+      this.screenListeners.delete(listener);
+    };
   }
 
   resize(width: number, height: number) {
     this.width = Math.max(1, width);
     this.height = Math.max(1, height);
-    const pixelRatio = Math.min(
-      window.devicePixelRatio || 1,
-      this.width < 700 ? 1.5 : 1.75,
-    );
-    this.renderer.setPixelRatio(pixelRatio);
+    // It covers the whole viewport: a slightly lighter ratio keeps it fluid.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
     this.renderer.setSize(this.width, this.height, false);
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
@@ -594,7 +631,7 @@ export class CrtRenderer {
     return this.focusScale();
   }
 
-  /** Pulls the camera back out of the glass, into the room. */
+  /** Pulls the camera back out of the glass. */
   diveOut() {
     return this.animateDive(0);
   }
@@ -611,7 +648,7 @@ export class CrtRenderer {
   async setFocusImage(src: string) {
     if (src === this.focusSource) return;
     this.focusSource = src;
-    const image = await loadFocusImage(src);
+    const image = await loadImage(src);
     if (!image || this.focusSource !== src) return;
     const width = image.naturalWidth || 1280;
     const height = image.naturalHeight || 800;
@@ -646,18 +683,12 @@ export class CrtRenderer {
     this.wake();
   }
 
-  setActive(active: boolean) {
-    this.running = active;
-    if (active) this.wake();
-    else if (this.frame) {
-      cancelAnimationFrame(this.frame);
-      this.frame = 0;
-    }
-  }
-
   dispose() {
-    this.setActive(false);
+    if (this.frame) cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    this.held = true;
     this.dive?.resolve();
+    this.screenListeners.clear();
     this.focusTexture?.dispose();
     for (const item of this.disposables) item.dispose();
     // The glass and the body share the model's textures.
@@ -718,16 +749,6 @@ export class CrtRenderer {
     );
   }
 
-  /** Distance from the glass at which it fills the frame as `framing` says. */
-  private viewDistance() {
-    const tangent = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-    const share = framing[this.layout];
-    return Math.max(
-      this.glassHeight / (2 * tangent * share.height),
-      this.glassWidth / (2 * tangent * this.camera.aspect * share.width),
-    );
-  }
-
   /** Distance from the glass at which it overflows the viewport. */
   private diveDistance() {
     const tangent = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
@@ -736,7 +757,7 @@ export class CrtRenderer {
       this.glassWidth / this.camera.aspect,
     );
     // A little closer than a cover fit: the rounded corners leave the view.
-    return (fit / (2 * tangent)) * 0.94;
+    return (fit / (2 * tangent)) * 0.9;
   }
 
   /**
@@ -755,64 +776,206 @@ export class CrtRenderer {
     return shown / cover;
   }
 
-  /** Reports where the glass is on the canvas, for the button over it. */
-  /**
-   * Shifts the projection, not the scene, off the left column; inside the
-   * glass the view is centred again.
-   */
-  private applyViewOffset(dived: number) {
-    const shift = -this.width * (leftColumn[this.layout] / 2) * (1 - dived);
-    this.camera.setViewOffset(
-      this.width,
-      this.height,
-      shift,
-      0,
-      this.width,
-      this.height,
+  /** What the glass should show at this point of the story, if anything. */
+  private screenContent(): ScreenContent | null {
+    const story = this.story;
+    const count = this.projects.length;
+    const screens = this.screens;
+    const card = (
+      key: string,
+      show: (now: number, instant: boolean) => void,
+    ): ScreenContent => ({ key, show });
+    if (showsProjects(story, count)) {
+      const index = THREE.MathUtils.clamp(
+        Math.floor(story.project),
+        0,
+        count - 1,
+      );
+      const project = this.projects[index];
+      return card(`project:${project.slug}`, (now, instant) =>
+        this.composer.showProject(project, now, instant),
+      );
+    }
+    // Once the projects are over the tube goes dark, and lights up again
+    // with the invitation once the visitor is well into its chapter.
+    if (story.ending > 0.65) {
+      return card("cta", (now, instant) =>
+        this.composer.showCard(
+          { kind: "cta", card: screens.cta },
+          now,
+          instant,
+        ),
+      );
+    }
+    if (story.outro >= 0.5) return null;
+    if (story.intro > 0.35) {
+      return card("terminal", (now, instant) =>
+        this.composer.showMessage(screens.terminal, now, instant),
+      );
+    }
+    if (story.dusk > 0.6) {
+      return card("manifesto", (now, instant) =>
+        this.composer.showCard(
+          { kind: "manifesto", card: screens.manifesto },
+          now,
+          instant,
+        ),
+      );
+    }
+    if (this.contactOpen) {
+      return card("contact", (now, instant) =>
+        this.composer.showCard(
+          { kind: "contact", card: screens.contact },
+          now,
+          instant,
+        ),
+      );
+    }
+    return card("hero", (now, instant) =>
+      this.composer.showCard(
+        { kind: "hero", card: screens.hero },
+        now,
+        instant,
+      ),
     );
   }
-  private reportScreenRect() {
-    this.camera.updateMatrixWorld();
+
+  /** Powers the tube on or off, or switches channels with a glitch. */
+  private tune(now: number) {
+    const content = this.screenContent();
+    const key = content?.key ?? "off";
+    if (key === this.contentKey) return;
+    const wasOff = this.contentKey === "off";
+    this.contentKey = key;
+    if (!content) {
+      this.powerTarget = 0;
+      this.pending = null;
+    } else if (wasOff) {
+      this.powerTarget = 1;
+      this.pending = null;
+      content.show(now + powerOnDelay, this.reducedMotion);
+    } else if (this.reducedMotion || this.diveProgress > 0) {
+      // Inside the glass the channel switches cleanly.
+      content.show(now, true);
+    } else {
+      // Tear the picture first, swap channels at the peak of the glitch.
+      this.glitch = 1;
+      if (key.startsWith("project:")) this.kick = 1;
+      this.pending = { show: content.show, at: now + 110 };
+    }
+  }
+
+  /** Places the monitor: the centre of its glass where the pose says. */
+  private place(pose: Pose, now: number, dived: number) {
+    const tangent = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const aspect = this.camera.aspect;
+    const time = now / 1000;
+    const size = Math.min(
+      pose.size,
+      (pose.width * aspect) / (this.glassWidth / this.glassHeight),
+    );
+    const distance = this.glassHeight / (2 * tangent * size);
+    const float = this.reducedMotion ? 0 : pose.float * (1 - dived);
+    const y = pose.y + Math.sin(time * 0.9) * 0.012 * float;
+    this.glass.center.set(
+      pose.x * distance * tangent * aspect,
+      y * distance * tangent,
+      -distance,
+    );
+    this.euler.set(
+      pose.pitch +
+        (this.pointer.smoothY * 0.06 + Math.sin(time * 0.7 + 1) * 0.015) *
+          float,
+      pose.yaw +
+        (this.pointer.smoothX * 0.1 + Math.sin(time * 0.5) * 0.035) * float,
+      pose.roll + Math.sin(time * 0.8 + 2) * 0.015 * float,
+      "YXZ",
+    );
+    this.monitor.quaternion.setFromEuler(this.euler);
+    this.monitor.position
+      .copy(this.glass.center)
+      .sub(
+        this.offset
+          .copy(this.glassCenter)
+          .applyQuaternion(this.monitor.quaternion),
+      );
+    this.monitor.updateMatrixWorld(true);
+    this.glass.normal
+      .copy(this.glassNormal)
+      .applyQuaternion(this.monitor.quaternion);
+    this.glass.up.copy(this.glassUp).applyQuaternion(this.monitor.quaternion);
+    this.glass.quaternion
+      .copy(this.monitor.quaternion)
+      .multiply(this.glassOrientation);
+    this.glass.distance = distance;
+  }
+
+  /** Reports where the glass is on the canvas, for the button over it. */
+  /** Where a part of the glass lands on the canvas, given as shares of it. */
+  private project(x: number, y: number, width: number, height: number) {
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
     let maxY = -Infinity;
-    for (const [x, y] of [
-      [-1, -1],
-      [1, -1],
-      [1, 1],
-      [-1, 1],
-    ]) {
-      this.corner
-        .copy(this.glassCenter)
-        .addScaledVector(this.glassRight, (x * this.glassWidth) / 2)
-        .addScaledVector(this.glassUp, (y * this.glassHeight) / 2)
-        .project(this.camera);
-      minX = Math.min(minX, this.corner.x);
-      maxX = Math.max(maxX, this.corner.x);
-      minY = Math.min(minY, this.corner.y);
-      maxY = Math.max(maxY, this.corner.y);
+    const right = this.offset.crossVectors(this.glass.up, this.glass.normal);
+    for (const across of [x, x + width]) {
+      for (const down of [y, y + height]) {
+        this.corner
+          .copy(this.glass.center)
+          .addScaledVector(right, (across - 0.5) * this.glassWidth)
+          .addScaledVector(this.glass.up, (0.5 - down) * this.glassHeight)
+          .project(this.camera);
+        minX = Math.min(minX, this.corner.x);
+        maxX = Math.max(maxX, this.corner.x);
+        minY = Math.min(minY, this.corner.y);
+        maxY = Math.max(maxY, this.corner.y);
+      }
     }
-    const rect = {
+    return {
       left: ((minX + 1) / 2) * this.width,
       top: ((1 - maxY) / 2) * this.height,
       width: ((maxX - minX) / 2) * this.width,
       height: ((maxY - minY) / 2) * this.height,
     };
-    const previous = this.screenRect;
-    if (
-      Math.abs(rect.left - previous.left) < 0.5 &&
-      Math.abs(rect.top - previous.top) < 0.5 &&
-      Math.abs(rect.width - previous.width) < 0.5 &&
-      Math.abs(rect.height - previous.height) < 0.5
-    )
-      return;
-    this.screenRect = rect;
-    this.onScreenRect(rect);
+  }
+
+  /**
+   * Reports where the glass and the regions of its card are on the canvas,
+   * for the buttons and links over them.
+   */
+  private reportScreen() {
+    if (this.screenListeners.size === 0) return;
+    this.camera.updateMatrixWorld();
+    const rect = this.project(0, 0, 1, 1);
+    const showing = this.composer.showing;
+    const regions = this.composer.regions;
+    const previous = this.screenFrame;
+    const moved =
+      Math.abs(rect.left - previous.rect.left) >= 0.5 ||
+      Math.abs(rect.top - previous.rect.top) >= 0.5 ||
+      Math.abs(rect.width - previous.rect.width) >= 0.5 ||
+      Math.abs(rect.height - previous.rect.height) >= 0.5;
+    const changed =
+      showing !== previous.showing ||
+      regions.length !== Object.keys(previous.regions).length ||
+      regions !== this.reportedRegions;
+    if (!moved && !changed) return;
+    this.reportedRegions = regions;
+    const frame: ScreenFrame = { showing, rect, regions: {} };
+    for (const region of regions) {
+      frame.regions[region.id] = this.project(
+        region.x,
+        region.y,
+        region.width,
+        region.height,
+      );
+    }
+    this.screenFrame = frame;
+    for (const listener of this.screenListeners) listener(frame);
   }
 
   private wake() {
-    if (this.running && !this.held && !this.frame) {
+    if (this.model && !this.held && !this.frame) {
       this.lastTime = performance.now();
       this.frame = requestAnimationFrame(this.tick);
     }
@@ -827,16 +990,14 @@ export class CrtRenderer {
     this.renderer.render(this.crtScene, this.crtCamera);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.scene, this.camera);
-    // The screen flickers: keep rendering while lit.
-    if (this.running && !this.held && (!settled || this.power > 0.001)) {
+    // It floats and the tube flickers: it only rests under reduced motion.
+    if (!this.held && (!settled || !this.reducedMotion)) {
       this.frame = requestAnimationFrame(this.tick);
     }
   };
 
   private update(now: number, delta: number) {
-    const { intro, project, outro } = this.scroll;
     const instant = this.reducedMotion;
-
     if (this.dive) {
       const { from, to, startedAt, resolve } = this.dive;
       const progress = Math.min(1, (now - startedAt) / diveDuration);
@@ -848,69 +1009,53 @@ export class CrtRenderer {
     }
     const dived = easeInOutCubic(this.diveProgress);
 
-    // Camera path: approach from the upper right, face the glass with a slow
-    // sway that slides the reflections across it, then pull back.
-    const approach = ease(intro);
-    const leave = ease(outro);
+    // The pose of the story, caught up with smoothly.
+    const target = poseAt(this.story, this.layout, this.contactOpen);
+    let moving = false;
+    for (const key of poseKeys) {
+      const value =
+        instant || !this.posePlaced
+          ? target[key]
+          : damp(this.pose[key], target[key], follow, delta);
+      if (Math.abs(value - target[key]) > 1e-4) moving = true;
+      this.pose[key] = value;
+    }
+    this.posePlaced = true;
     this.pointer.smoothX = damp(this.pointer.smoothX, this.pointer.x, 3, delta);
     this.pointer.smoothY = damp(this.pointer.smoothY, this.pointer.y, 3, delta);
-    const pointerX = instant ? 0 : this.pointer.smoothX;
-    const pointerY = instant ? 0 : this.pointer.smoothY;
-    const across =
-      THREE.MathUtils.lerp(
-        introView.across,
-        restingView.across + Math.sin(project * 1.15) * 0.05,
-        approach,
-      ) +
-      leave * 0.25 +
-      pointerX * 0.06;
-    const along =
-      THREE.MathUtils.lerp(
-        introView.along,
-        restingView.along + Math.cos(project * 0.9) * 0.02,
-        approach,
-      ) +
-      leave * 0.3 -
-      pointerY * 0.04;
-    const distance =
-      this.viewDistance() *
-      (THREE.MathUtils.lerp(2.2, 1, approach) + leave * 1.2);
-    this.viewDirection
-      .copy(this.glassNormal)
-      .addScaledVector(this.glassRight, across)
-      .addScaledVector(this.glassUp, along)
-      .normalize();
-    this.cameraTarget
-      .copy(this.glassCenter)
-      .addScaledVector(this.viewDirection, distance);
-    // From afar the camera looks above the glass, which rises into frame.
-    this.lookTarget
-      .copy(this.glassCenter)
-      .addScaledVector(this.glassUp, (1 - approach) * 0.25);
-    if (instant || !this.cameraPlaced) {
-      this.cameraPosition.copy(this.cameraTarget);
-      this.cameraPlaced = true;
-    } else {
-      this.cameraPosition.set(
-        damp(this.cameraPosition.x, this.cameraTarget.x, 4, delta),
-        damp(this.cameraPosition.y, this.cameraTarget.y, 4, delta),
-        damp(this.cameraPosition.z, this.cameraTarget.z, 4, delta),
-      );
-    }
-    // The dive blends the room camera towards a frontal view of the glass.
+    this.kick = damp(this.kick, 0, 5, delta);
+
+    // Once loaded, it rises into place, turning.
+    const appear = instant
+      ? 1
+      : ease(
+          THREE.MathUtils.clamp((now - this.loadedAt) / appearDuration, 0, 1),
+        );
+    const placed: Pose = {
+      ...this.pose,
+      y: this.pose.y - (1 - appear) * 0.35,
+      yaw: this.pose.yaw + (1 - appear) * 0.8,
+      size: this.pose.size * (0.75 + 0.25 * appear) * (1 - this.kick * 0.035),
+      pitch: this.pose.pitch + this.kick * 0.05,
+    };
+    this.place(placed, now, dived);
+
+    // The camera dives into the glass, turning upright with it.
+    const glass = this.glass;
     this.divePosition
-      .copy(this.glassCenter)
-      .addScaledVector(this.glassNormal, this.diveDistance());
-    this.camera.position.lerpVectors(
-      this.cameraPosition,
-      this.divePosition,
-      dived,
-    );
+      .copy(glass.center)
+      .addScaledVector(glass.normal, this.diveDistance());
+    this.camera.position.set(0, 0, 0).lerp(this.divePosition, dived);
+    this.camera.up.copy(this.worldUp).lerp(glass.up, dived).normalize();
     this.camera.lookAt(
-      this.look.lerpVectors(this.lookTarget, this.glassCenter, dived),
+      this.look.lerpVectors(this.forward, glass.center, dived),
     );
-    this.applyViewOffset(dived);
-    this.reportScreenRect();
+
+    this.tune(now);
+    if (this.pending && now >= this.pending.at) {
+      this.pending.show(now, false);
+      this.pending = null;
+    }
 
     // Power cycle: slower on than off, like a warming tube.
     const powerSpeed = this.powerTarget > this.power ? 1.15 : 2.4;
@@ -922,16 +1067,13 @@ export class CrtRenderer {
           0,
           1,
         );
-
-    if (this.pendingProject && now >= this.pendingProject.at) {
-      this.composer.showProject(this.pendingProject.project, now);
-      this.pendingProject = null;
-    }
     this.glitch = damp(this.glitch, 0, 5.5, delta);
 
+    this.composer.setProgress(this.story.manifesto);
     if (this.power > 0 && this.composer.draw(now))
       this.screenTexture.needsUpdate = true;
     if (this.powerTarget === 0 && this.power === 0) this.composer.off();
+    this.reportScreen();
 
     const [r, g, b] = this.composer.lightColor;
     this.lightColor.setRGB(
@@ -944,8 +1086,6 @@ export class CrtRenderer {
       Math.sin(now * 0.11) * 0.015 +
       this.glitch * (Math.random() - 0.5) * 0.6;
     const lit = ease(this.power);
-    this.screenLight.color.copy(this.lightColor);
-    this.screenLight.intensity = lit * 7 * flicker;
     this.glow.material.color.copy(this.lightColor);
     this.glow.material.opacity = lit * 0.075 * flicker * (1 - dived);
     if (this.bodyMaterial)
@@ -955,7 +1095,7 @@ export class CrtRenderer {
     const clean = smoothstep(0.15, 0.8, this.diveProgress);
     if (this.glassMaterial) {
       this.glassMaterial.envMapIntensity = glassReflection * (1 - clean);
-      this.glassMaterial.color.setScalar(1 - clean);
+      this.glassMaterial.color.setScalar(glassDiffuse * (1 - clean));
     }
     const uniforms = this.crtMaterial.uniforms;
     uniforms.uTime.value = now / 1000;
@@ -967,9 +1107,25 @@ export class CrtRenderer {
       : 0;
     this.composer.setFocus(smoothstep(0, 0.3, this.diveProgress));
 
+    // The projects slide by behind it during their chapter.
+    const story = this.story;
+    const presence =
+      smoothstep(0.1, 0.6, story.intro) *
+      (1 - smoothstep(0.1, 0.5, story.outro)) *
+      (1 - dived);
+    this.holograms.update({
+      project: story.project,
+      presence,
+      layout: this.layout,
+      glass,
+      camera: this.camera,
+    });
+
     return (
       !this.dive &&
-      this.cameraPosition.distanceToSquared(this.cameraTarget) < 1e-6 &&
+      !moving &&
+      appear === 1 &&
+      this.kick < 0.002 &&
       this.power === this.powerTarget &&
       this.glitch < 0.002
     );

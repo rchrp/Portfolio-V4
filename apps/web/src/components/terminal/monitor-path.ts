@@ -69,10 +69,11 @@ const poses: Record<StageLayout, Poses> = {
     // Over the night transition: closer, almost facing the visitor.
     dusk: { x: 0.04, y: 0.02, size: 0.4, width: 0.5, yaw: -0.16, pitch: 0.02, roll: -0.04, float: 0.8 },
     // Centre stage, holding the statement up.
-    manifesto: { x: 0, y: 0.02, size: 0.56, width: 0.64, yaw: -0.05, pitch: 0.02, roll: 0, float: 0.25 },
-    manifestoEnd: { x: 0, y: 0.04, size: 0.54, width: 0.62, yaw: 0.05, pitch: 0, roll: 0, float: 0.25 },
-    // Centre stage, the holograms on either side.
-    projects: { x: 0, y: 0.05, size: 0.48, width: 0.5, yaw: 0, pitch: 0, roll: 0, float: 0.3 },
+    manifesto: { x: 0, y: 0.02, size: 0.48, width: 0.55, yaw: -0.05, pitch: 0.02, roll: 0, float: 0.25 },
+    manifestoEnd: { x: 0, y: 0.04, size: 0.47, width: 0.54, yaw: 0.05, pitch: 0, roll: 0, float: 0.25 },
+    // Centre stage, closer than for the statement: the chapter zooms in on
+    // the projects, their cards on either side.
+    projects: { x: 0, y: 0.05, size: 0.56, width: 0.58, yaw: 0, pitch: 0, roll: 0, float: 0.3 },
     leave: { x: -0.2, y: 0.12, size: 0.3, width: 0.4, yaw: 0.25, pitch: 0.05, roll: -0.03, float: 0.8 },
     // Low in the middle, carrying the invitation.
     contact: { x: 0, y: -0.22, size: 0.44, width: 0.52, yaw: 0, pitch: -0.04, roll: 0, float: 0.4 },
@@ -82,30 +83,12 @@ const poses: Record<StageLayout, Poses> = {
     hero: { x: 0, y: -0.6, size: 0.26, width: 0.92, yaw: 0, pitch: -0.03, roll: 0, float: 0.4 },
     heroOpen: { x: 0, y: 0, size: 0.4, width: 0.98, yaw: 0, pitch: 0, roll: 0, float: 0.15 },
     dusk: { x: 0, y: 0.04, size: 0.24, width: 0.9, yaw: -0.15, pitch: 0.02, roll: -0.04, float: 0.8 },
-    manifesto: { x: 0, y: 0.05, size: 0.3, width: 0.92, yaw: 0, pitch: 0, roll: 0, float: 0.25 },
-    manifestoEnd: { x: 0, y: 0.08, size: 0.3, width: 0.92, yaw: 0.04, pitch: 0, roll: 0, float: 0.25 },
-    projects: { x: 0, y: 0.26, size: 0.32, width: 0.84, yaw: 0, pitch: 0, roll: 0, float: 0.3 },
+    manifesto: { x: 0, y: 0.05, size: 0.28, width: 0.84, yaw: 0, pitch: 0, roll: 0, float: 0.25 },
+    manifestoEnd: { x: 0, y: 0.08, size: 0.28, width: 0.84, yaw: 0.04, pitch: 0, roll: 0, float: 0.25 },
+    projects: { x: 0, y: 0.26, size: 0.34, width: 0.9, yaw: 0, pitch: 0, roll: 0, float: 0.3 },
     leave: { x: 0, y: 0.4, size: 0.18, width: 0.6, yaw: 0.2, pitch: 0.05, roll: -0.03, float: 0.8 },
     contact: { x: 0, y: -0.5, size: 0.26, width: 0.92, yaw: 0, pitch: -0.03, roll: 0, float: 0.4 },
   },
-};
-
-export type HologramTrack = {
-  /** From one card to the next, in normalized device coordinates. */
-  spacing: number;
-  /** Height of the track, in normalized device coordinates. */
-  y: number;
-  /** Height of a card as a share of the viewport's height. */
-  size: number;
-  /** Distance relative to the glass's: above 1, behind it. */
-  depth: number;
-};
-
-// The cards slide from left to right behind the glass: the next project on
-// the left, the last one on the right. On phones, below the monitor.
-export const hologramTracks: Record<StageLayout, HologramTrack> = {
-  side: { spacing: 0.74, y: 0, size: 0.22, depth: 1.3 },
-  stacked: { spacing: 0.8, y: -0.55, size: 0.15, depth: 1.1 },
 };
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));

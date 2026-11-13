@@ -85,10 +85,12 @@ const lightGrid = 8;
 const WIDTH = 1296;
 const HEIGHT = 768;
 const pixelRatio = 4 / 3;
+/** Width of the glass's picture over its height. */
+export const screenAspect = WIDTH / HEIGHT;
 
 const { phosphor, soft, dim, hairline, glassTint, night, accent } = palette;
-// The picture scans in, then the text rises element by element.
-const revealDuration = 520;
+// The picture is there at once (the glass develops it from its x-ray, see
+// monitor-renderer.ts), the text rises element by element.
 const textDelay = 240;
 const textDuration = 520;
 const textStagger = 70;
@@ -197,7 +199,7 @@ function createCanvas(width: number, height: number) {
 }
 
 /**
- * Loads and decodes a picture once for the glass, the holograms and the
+ * Loads and decodes a picture once for the glass, the x-ray panels and the
  * dive; one that failed is tried again on the next call.
  */
 export function loadImage(src: string) {
@@ -413,6 +415,11 @@ export class ScreenComposer {
   /** What the glass shows: "off", "project", "message" or a card's kind. */
   get showing(): string {
     return this.mode.kind === "card" ? this.mode.card.kind : this.mode.kind;
+  }
+
+  /** The project on the glass, if it shows one. */
+  get shownProject(): ScreenProject | null {
+    return this.mode.kind === "project" ? this.mode.project : null;
   }
 
   /** The regions of the card on the glass, from its last frame. */
@@ -790,12 +797,6 @@ export class ScreenComposer {
     context.fillStyle = night;
     context.fillRect(0, 0, WIDTH, HEIGHT);
 
-    // The picture scans in from the top, like a slow modem.
-    const loaded = easeOut(clamp01(elapsed / revealDuration));
-    context.save();
-    context.beginPath();
-    context.rect(0, 0, WIDTH, HEIGHT * loaded);
-    context.clip();
     const artwork = this.artwork;
     if (artwork && overlay === 1) {
       // Pixel for pixel: the layer has the canvas's resolution.
@@ -812,11 +813,7 @@ export class ScreenComposer {
       if (artwork) context.drawImage(artwork.blur, 0, 0, WIDTH, HEIGHT);
       fillShade(context);
     }
-    context.restore();
-    if (loaded < 1) {
-      context.fillStyle = phosphor;
-      context.fillRect(0, HEIGHT * loaded - 2, WIDTH, 3);
-    }
+    context.globalAlpha = 1;
     if (overlay <= 0) return;
 
     const rise = (step: number) => {

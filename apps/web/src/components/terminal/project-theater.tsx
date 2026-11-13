@@ -10,6 +10,7 @@ import {
   type CSSProperties,
 } from "react";
 import { PixelArrow } from "@/components/pixel-arrow";
+import { restingPoints } from "@/components/keyboard-navigation";
 import {
   PixelMatrix,
   prefetchField,
@@ -23,10 +24,15 @@ import {
   type ProjectCatalog,
 } from "@/lib/projects";
 import { projectsChapter } from "@/lib/site-content";
-import { holdPageScroll, scrollPageTo } from "@/lib/smooth-scroll";
+import {
+  holdPageScroll,
+  magnetizeScroll,
+  scrollPageTo,
+} from "@/lib/smooth-scroll";
 import { useScrollProgress } from "@/lib/use-scroll-progress";
 import type { StageLayout } from "./monitor-path";
 import type { MonitorRenderer, ScreenRect } from "./monitor-renderer";
+import { ProjectDeck } from "./project-deck";
 import {
   placeholderArtwork,
   ProjectShowcase,
@@ -41,13 +47,15 @@ import {
   OUTRO,
   showsProjects,
   theaterProgress,
+  titleStop,
 } from "./theater-timeline";
 
 const brandRgb = [241, 90, 36];
-// Behind the monitor on wide screens, between the holograms, so that the
-// mark glows around it; below the monitor on narrow ones, which would hide
-// anything drawn behind it.
-const sideField: FieldRect = { x: 0.26, y: 0.04, width: 0.48, height: 0.92 };
+// The project's mark: on wide screens in the top left corner, like a channel's
+// logo, clear of the monitor (from about 14% of the width, even as it sways),
+// of the left card (from 40% of the height) and of the shade along the top;
+// below the monitor on narrow ones, which leave no room above it.
+const sideField: FieldRect = { x: 0.03, y: 0.08, width: 0.11, height: 0.29 };
 const stackedField: FieldRect = { x: 0.06, y: 0.7, width: 0.88, height: 0.24 };
 
 const clamp = (value: number, minimum: number, maximum: number) =>
@@ -149,8 +157,8 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     [],
   );
 
-  // What the glass shows of each project, and its hologram: the hero of its
-  // showcase.
+  // What the glass shows of each project, and its card in x-ray: the hero of
+  // its showcase.
   const screenProjects = useMemo(
     (): ScreenProject[] =>
       projects.map((item, index) => ({
@@ -205,9 +213,32 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     };
   }, [renderer, screenProjects]);
 
+  // Left between the title and the projects, or between two of them, the page
+  // settles on the nearest: its resting points are the arrow keys' (see
+  // data-nav-stops). They move with the chapters above and the viewport.
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section || count === 0) return;
+    let release = () => {};
+    const update = () => {
+      release();
+      release = magnetizeScroll(restingPoints(section));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(document.body);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      release();
+    };
+  }, [count]);
+
   useScrollProgress(sectionRef, ({ offset, viewport }) => {
     if (count === 0) return;
-    const progress = theaterProgress(offset / viewport, count);
+    const steps = offset / viewport;
+    const progress = theaterProgress(steps, count);
     const { intro, outro } = progress;
     const projectPosition = clamp(progress.project, 0, count);
     const index = clamp(Math.floor(projectPosition), 0, count - 1);
@@ -217,6 +248,11 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
     const style = sectionRef.current?.style;
     style?.setProperty("--intro", intro.toFixed(4));
     style?.setProperty("--outro", outro.toFixed(4));
+    // 0 → 1 from the title's rest to the first project reaching the glass.
+    style?.setProperty(
+      "--title-out",
+      clamp((steps - titleStop) / (INTRO - titleStop), 0, 1).toFixed(4),
+    );
     style?.setProperty(
       "--channel",
       clamp(projectPosition - index, 0, 1).toFixed(4),
@@ -417,8 +453,12 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
       data-dived={dived || undefined}
       // Read by the page's monitor (see MonitorStage).
       data-count={count}
-      // The arrow keys rest on each channel (see KeyboardNavigation).
-      data-nav-stops={projects.map((_, index) => channelStop(index)).join(" ")}
+      // The arrow keys rest on the title, then on each channel (see
+      // KeyboardNavigation).
+      data-nav-stops={[
+        titleStop,
+        ...projects.map((_, index) => channelStop(index)),
+      ].join(" ")}
       style={
         {
           "--steps": INTRO + count + OUTRO,
@@ -436,7 +476,8 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
             maxScale={0.62}
             fieldScale={0.86}
             restOpacity={0.22}
-            edgeFade={90}
+            // Narrow enough to leave the mark in the corner unfaded.
+            edgeFade={56}
             intro={false}
             field={powered ? project.edgeMapUrl : null}
             fieldSource={powered ? fieldSourceOf(project) : null}
@@ -446,6 +487,12 @@ export function ProjectTheater({ catalog }: { catalog: ProjectCatalog }) {
         </div>
 
         <div className="theater-shade" aria-hidden="true" />
+
+        <ProjectDeck
+          projects={projects}
+          layout={layout}
+          sectionRef={sectionRef}
+        />
 
         <header className="theater-header">
           <h2 id="projects-heading" className="theater-heading">

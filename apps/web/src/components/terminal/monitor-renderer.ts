@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { HologramDeck, type GlassFrame } from "./holograms";
+import { cardAspect, cardHeight, cardTracks, placeCard } from "./card-track";
 import {
   ease,
   poseAt,
@@ -12,6 +12,7 @@ import {
 import {
   loadImage,
   ScreenComposer,
+  screenAspect,
   type ScreenMessage,
   type ScreenProject,
   type ScreenRegion,
@@ -23,7 +24,8 @@ import type {
   ManifestoCard,
 } from "./screen-cards";
 import { createSunsetEnvironments } from "./sunset-environment";
-import { showsProjects } from "./theater-timeline";
+import { channelRest, showsProjects } from "./theater-timeline";
+import { XrayPanels } from "./xray-panels";
 
 /** Bounds of the glass on the canvas, in CSS pixels. */
 export type ScreenRect = {
@@ -50,6 +52,13 @@ export type ScreenFrame = {
   regions: Record<string, ScreenRect>;
 };
 
+/** The glass in world space. */
+type GlassFrame = {
+  center: THREE.Vector3;
+  normal: THREE.Vector3;
+  up: THREE.Vector3;
+};
+
 const crtVertex = /* glsl */ `
   varying vec2 vUv;
   void main() {
@@ -65,16 +74,37 @@ const crtVertex = /* glsl */ `
 // cycle. uClean fades all of it out and uFocus swaps the hero for the
 // project picture alone while the camera dives into the glass: the tube ends
 // up a plain, modern display.
+//
+// While it shows the projects, uXray turns the glass into an x-ray of the
+// cards passing behind it: up to two slots (uSlotA, uSlotB: centre and half
+// size, in shares of the glass) where their panels show as radiographs, in
+// the site's warm phosphor over the night of the tube. As a card comes to
+// rest it fills the glass while a scan sweeps across it (uDevelop), leaving
+// the project's hero, uMap, behind.
 const crtFragment = /* glsl */ `
   uniform sampler2D uMap;
   uniform sampler2D uFocusMap;
+  uniform sampler2D uPanelA;
+  uniform sampler2D uPanelB;
   uniform float uTime;
   uniform float uPower;
   uniform float uGlitch;
   uniform float uClean;
   uniform float uFocus;
   uniform vec2 uFocusCover;
+  uniform float uXray;
+  uniform vec4 uSlotA;
+  uniform vec4 uSlotB;
+  uniform vec2 uShown;
+  uniform vec2 uDevelop;
   varying vec2 vUv;
+
+  const float aspect = ${screenAspect.toFixed(4)};
+  // The site's phosphor (#ece8da), its night (#0c0b09) and a trace of its
+  // accent (#f15a24), in linear light.
+  const vec3 xrayTint = vec3(0.84, 0.8, 0.7);
+  const vec3 xrayNight = vec3(0.0037, 0.0033, 0.0027);
+  const vec3 xrayWarmth = vec3(0.88, 0.1, 0.018);
 
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
@@ -95,6 +125,61 @@ const crtFragment = /* glsl */ `
       texture2D(uFocusMap, cover - offset).b
     );
     return mix(hero, picture, uFocus);
+  }
+
+  // The hero, with a cheap phosphor bleed: two wide taps around the pixel.
+  vec3 litScreen(vec2 uv, vec2 offset) {
+    vec3 color = sampleScreen(uv, offset);
+    float crt = 1.0 - uClean;
+    if (crt > 0.0) {
+      vec3 bleed = sampleScreen(uv + vec2(0.003, 0.0), offset)
+        + sampleScreen(uv - vec2(0.003, 0.0), offset);
+      color += bleed * 0.05 * crt;
+    }
+    return color;
+  }
+
+  float luma(vec3 color) {
+    return dot(color, vec3(0.299, 0.587, 0.114));
+  }
+
+  // A card seen through the monitor: its light and, brighter, its edges, the
+  // difference with a blurred copy of itself read from its mipmaps.
+  vec3 radiograph(sampler2D panel, vec2 uv) {
+    float sharp = luma(texture2D(panel, uv).rgb);
+    float soft = luma(texture2D(panel, uv, 3.0).rgb);
+    float density = 0.04 + sharp * 0.12 + abs(sharp - soft) * 2.6;
+    return xrayNight + xrayTint * density;
+  }
+
+  // The night of the tube, a faint warmth in its middle.
+  vec3 xrayField(vec2 uv) {
+    vec2 fromCenter = (uv - 0.5) * vec2(1.0, 1.4);
+    float glow = max(0.0, 1.0 - dot(fromCenter, fromCenter) * 2.2);
+    return xrayNight + xrayWarmth * glow * 0.035;
+  }
+
+  vec3 xraySlot(vec3 under, vec2 uv, vec2 offset, sampler2D panel, vec4 slot,
+      float shown, float develop) {
+    if (shown <= 0.0) return under;
+    vec2 local = (uv - slot.xy) / (2.0 * slot.zw) + 0.5;
+    // Rounded like the card, square once it fills the glass.
+    vec2 halfSize = slot.zw * vec2(aspect, 1.0);
+    float radius = min(halfSize.x, halfSize.y) * 0.14 * (1.0 - develop);
+    vec2 q = abs((uv - slot.xy) * vec2(aspect, 1.0)) - halfSize + radius;
+    float edge = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+    float inside = 1.0 - smoothstep(-0.002, 0.002, edge);
+    if (inside <= 0.0) return under;
+    vec3 color = radiograph(panel, local);
+    if (develop > 0.0) {
+      // The scan runs from the card's leading edge, on the left.
+      float scan = develop * 1.08 - 0.04;
+      float lit = 1.0 - smoothstep(scan - 0.008, scan + 0.008, local.x);
+      if (lit > 0.0) color = mix(color, litScreen(local, offset), lit);
+      float beam = exp(-abs(local.x - scan) * 180.0) * step(develop, 0.999);
+      color += xrayTint * beam * 0.45;
+    }
+    return mix(under, color, inside);
   }
 
   void main() {
@@ -118,13 +203,13 @@ const crtFragment = /* glsl */ `
     // Light enough to keep small text sharp.
     vec2 aberration = (fromCenter * (0.001 + dot(fromCenter, fromCenter) * 0.004 + glitch * 0.02)
       + vec2(0.0003, 0.0)) * crt;
-    vec3 color = sampleScreen(powered, aberration);
-
-    // Cheap phosphor bleed: two wide taps around the pixel.
-    if (crt > 0.0) {
-      vec3 bleed = sampleScreen(powered + vec2(0.003, 0.0), aberration)
-        + sampleScreen(powered - vec2(0.003, 0.0), aberration);
-      color += bleed * 0.05 * crt;
+    vec3 color = vec3(0.0);
+    if (uXray < 1.0) color = litScreen(powered, aberration);
+    if (uXray > 0.0) {
+      vec3 xray = xrayField(powered);
+      xray = xraySlot(xray, powered, aberration, uPanelA, uSlotA, uShown.x, uDevelop.x);
+      xray = xraySlot(xray, powered, aberration, uPanelB, uSlotB, uShown.y, uDevelop.y);
+      color = mix(color, xray, uXray);
     }
 
     // 240 lines: coarse enough not to shimmer once the texture is minified.
@@ -233,7 +318,8 @@ type ScreenContent = {
  * The monitor of the home page, drawn on a canvas covering the viewport. The
  * camera stays put while the monitor moves through the story, from pose to
  * pose; its glass shows a few words between chapters and the projects in
- * their chapter, where the holograms of those to come float around it.
+ * their chapter, seeing through to the cards of the others as they slide by
+ * behind it (see ProjectDeck).
  */
 export class MonitorRenderer {
   private readonly renderer: THREE.WebGLRenderer;
@@ -252,7 +338,7 @@ export class MonitorRenderer {
     THREE.PlaneGeometry,
     THREE.MeshBasicMaterial
   >;
-  private readonly holograms: HologramDeck;
+  private readonly panels: XrayPanels;
   private glassMaterial: THREE.MeshStandardMaterial | null = null;
   private bodyMaterial: THREE.MeshStandardMaterial | null = null;
   private model: THREE.Object3D | null = null;
@@ -271,10 +357,6 @@ export class MonitorRenderer {
     center: new THREE.Vector3(),
     normal: new THREE.Vector3(0, 0, 1),
     up: new THREE.Vector3(0, 1, 0),
-    quaternion: new THREE.Quaternion(),
-    width: 1.4,
-    height: 0.82,
-    distance: 5,
   };
   private pose: Pose = poseAt(storyStart, "side");
   private posePlaced = false;
@@ -294,8 +376,6 @@ export class MonitorRenderer {
   private power = 0;
   private powerTarget = 0;
   private glitch = 0;
-  // A small recoil as a hologram lands in the glass.
-  private kick = 0;
   private contentKey = "off";
   private pending: { show: ScreenContent["show"]; at: number } | null = null;
   private dive: Dive | null = null;
@@ -370,6 +450,13 @@ export class MonitorRenderer {
         uFocus: { value: 0 },
         uFocusMap: { value: null },
         uFocusCover: { value: new THREE.Vector2(1, 1) },
+        uXray: { value: 0 },
+        uPanelA: { value: null },
+        uPanelB: { value: null },
+        uSlotA: { value: new THREE.Vector4() },
+        uSlotB: { value: new THREE.Vector4() },
+        uShown: { value: new THREE.Vector2() },
+        uDevelop: { value: new THREE.Vector2() },
       },
       vertexShader: crtVertex,
       fragmentShader: crtFragment,
@@ -396,8 +483,8 @@ export class MonitorRenderer {
       }),
     );
     this.monitor.add(this.glow);
-    this.holograms = new HologramDeck(this.renderer, options.sans);
-    this.scene.add(this.monitor, this.holograms.group);
+    this.panels = new XrayPanels(this.renderer, options.sans);
+    this.scene.add(this.monitor);
 
     // Warm from the upper left, an orange rim from behind on the right.
     const key = new THREE.DirectionalLight(0xffdcc0, 2.6);
@@ -418,7 +505,7 @@ export class MonitorRenderer {
       this.glow.geometry,
       this.glow.material,
       this.glow.material.map!,
-      this.holograms,
+      this.panels,
     );
   }
 
@@ -544,8 +631,6 @@ export class MonitorRenderer {
       .multiplyScalar((across.min + across.max) / 2)
       .addScaledVector(this.glassUp, (along.min + along.max) / 2)
       .addScaledVector(this.glassNormal, depth / positions.count);
-    this.glass.width = this.glassWidth;
-    this.glass.height = this.glassHeight;
   }
 
   setLayout(layout: StageLayout) {
@@ -563,7 +648,7 @@ export class MonitorRenderer {
   setProjects(projects: ScreenProject[]) {
     this.projects = projects;
     this.composer.preload(projects);
-    this.holograms.setProjects(projects);
+    this.panels.setProjects(projects);
     this.wake();
   }
 
@@ -846,22 +931,28 @@ export class MonitorRenderer {
     const content = this.screenContent();
     const key = content?.key ?? "off";
     if (key === this.contentKey) return;
-    const wasOff = this.contentKey === "off";
+    const previous = this.contentKey;
     this.contentKey = key;
     if (!content) {
       this.powerTarget = 0;
       this.pending = null;
-    } else if (wasOff) {
+    } else if (previous === "off") {
       this.powerTarget = 1;
       this.pending = null;
       content.show(now + powerOnDelay, this.reducedMotion);
-    } else if (this.reducedMotion || this.diveProgress > 0) {
-      // Inside the glass the channel switches cleanly.
+    } else if (
+      this.reducedMotion ||
+      this.diveProgress > 0 ||
+      (previous.startsWith("project:") && key.startsWith("project:"))
+    ) {
+      // Inside the glass the channel switches cleanly, and so it does from
+      // one project to the next: out of sight, while the x-ray shows both
+      // cards sliding by.
+      this.pending = null;
       content.show(now, true);
     } else {
       // Tear the picture first, swap channels at the peak of the glitch.
       this.glitch = 1;
-      if (key.startsWith("project:")) this.kick = 1;
       this.pending = { show: content.show, at: now + 110 };
     }
   }
@@ -905,10 +996,6 @@ export class MonitorRenderer {
       .copy(this.glassNormal)
       .applyQuaternion(this.monitor.quaternion);
     this.glass.up.copy(this.glassUp).applyQuaternion(this.monitor.quaternion);
-    this.glass.quaternion
-      .copy(this.monitor.quaternion)
-      .multiply(this.glassOrientation);
-    this.glass.distance = distance;
   }
 
   /** Reports where the glass is on the canvas, for the button over it. */
@@ -1024,7 +1111,6 @@ export class MonitorRenderer {
     this.posePlaced = true;
     this.pointer.smoothX = damp(this.pointer.smoothX, this.pointer.x, 3, delta);
     this.pointer.smoothY = damp(this.pointer.smoothY, this.pointer.y, 3, delta);
-    this.kick = damp(this.kick, 0, 5, delta);
 
     // Once loaded, it rises into place, turning.
     const appear = instant
@@ -1036,8 +1122,7 @@ export class MonitorRenderer {
       ...this.pose,
       y: this.pose.y - (1 - appear) * 0.35,
       yaw: this.pose.yaw + (1 - appear) * 0.8,
-      size: this.pose.size * (0.75 + 0.25 * appear) * (1 - this.kick * 0.035),
-      pitch: this.pose.pitch + this.kick * 0.05,
+      size: this.pose.size * (0.75 + 0.25 * appear),
     };
     this.place(placed, now, dived);
 
@@ -1107,28 +1192,72 @@ export class MonitorRenderer {
       ? smoothstep(0.3, 0.55, this.diveProgress)
       : 0;
     this.composer.setFocus(smoothstep(0, 0.3, this.diveProgress));
-
-    // The projects slide by behind it during their chapter.
-    const story = this.story;
-    const presence =
-      smoothstep(0.1, 0.6, story.intro) *
-      (1 - smoothstep(0.1, 0.5, story.outro)) *
-      (1 - dived);
-    this.holograms.update({
-      project: story.project,
-      presence,
-      layout: this.layout,
-      glass,
-      camera: this.camera,
-    });
+    this.updateXray();
 
     return (
       !this.dive &&
       !moving &&
       appear === 1 &&
-      this.kick < 0.002 &&
       this.power === this.powerTarget &&
       this.glitch < 0.002
     );
+  }
+
+  /**
+   * While the glass shows the projects, places on it the cards passing
+   * behind it, where they are, and develops the one coming to rest into its
+   * project's hero.
+   */
+  private updateXray() {
+    const uniforms = this.crtMaterial.uniforms;
+    const hero = this.composer.shownProject;
+    // Diving in, the hero takes the glass alone.
+    uniforms.uXray.value = hero ? 1 - smoothstep(0, 0.2, this.diveProgress) : 0;
+    if (!hero) return;
+    this.camera.updateMatrixWorld();
+    const glass = this.project(0, 0, 1, 1);
+    if (glass.width < 1 || glass.height < 1) return;
+
+    const { project } = this.story;
+    const layout = this.layout;
+    // A card's height, as a share of the viewport's, in glass widths and
+    // heights.
+    const widthScale = (this.height * cardAspect) / glass.width;
+    const heightScale = this.height / glass.height;
+    // From one card to the next, in glass widths: as far apart as they are
+    // behind the glass, unless that would crowd more than two on it (on
+    // phones, where they run below the monitor).
+    const step = Math.max(
+      (cardTracks[layout].spacing * this.width) / 2 / glass.width,
+      0.56 + (cardHeight(1, layout) * widthScale) / 2,
+    );
+    // Where the middle of the viewport falls on the glass.
+    const middle = (this.width / 2 - glass.left) / glass.width;
+
+    // The card that has just passed the middle, and the next one.
+    const first = Math.floor(project - channelRest);
+    const slots = [
+      { panel: uniforms.uPanelA, rect: uniforms.uSlotA.value },
+      { panel: uniforms.uPanelB, rect: uniforms.uSlotB.value },
+    ] as const;
+    slots.forEach(({ panel, rect }, slot) => {
+      const index = first + slot;
+      const texture = this.panels.at(index);
+      panel.value = texture;
+      const shown = texture ? 1 : 0;
+      const card = placeCard(project, index, layout);
+      // Only the project on the glass develops: it is the one at rest.
+      const develop =
+        index === hero.index ? 1 - smoothstep(0.03, 0.3, card.away) : 0;
+      const centre = middle + (card.x / cardTracks[layout].spacing) * step;
+      rect.set(
+        THREE.MathUtils.lerp(centre, 0.5, develop),
+        0.5,
+        THREE.MathUtils.lerp((card.height * widthScale) / 2, 0.5, develop),
+        THREE.MathUtils.lerp((card.height * heightScale) / 2, 0.5, develop),
+      );
+      uniforms.uShown.value.setComponent(slot, shown);
+      uniforms.uDevelop.value.setComponent(slot, develop);
+    });
   }
 }

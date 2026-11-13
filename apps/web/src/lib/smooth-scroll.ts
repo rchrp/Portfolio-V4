@@ -1,13 +1,20 @@
 import Lenis from "lenis";
+import Snap from "lenis/snap";
 
 // Wheel scrolling glides towards its target instead of jumping notch by
 // notch, so the scroll-driven scenes move as continuously as their cameras.
-// Touch scrolling stays native, and reduced motion keeps the browser's own.
+// Left between two resting points, it settles on the nearest one. Touch
+// scrolling stays native, and reduced motion keeps the browser's own.
 
 let page: Lenis | null = null;
+let magnet: Snap | null = null;
 // Where a jump started by `scrollPageTo` is heading, until it lands or the
 // visitor takes over: Lenis reports its progress, not its destination.
 let destination: number | null = null;
+// Resting points registered with `magnetizeScroll`, and how to remove them
+// from the magnet.
+const magnetPoints = new Set<number[]>();
+let releaseMagnetPoints: (() => void)[] = [];
 
 const prefersReducedMotion = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -15,6 +22,18 @@ const prefersReducedMotion = () =>
 // Longer jumps take a little longer, without dragging.
 const travelDuration = (distance: number) =>
   Math.min(2, 0.9 + (Math.abs(distance) / window.innerHeight) * 0.12);
+
+// The page eases off where the visitor left it, then onto its resting point.
+const easeInOutCubic = (value: number) =>
+  value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
+
+function syncMagnet() {
+  for (const release of releaseMagnetPoints) release();
+  const current = magnet;
+  releaseMagnetPoints = current
+    ? [...magnetPoints].flat().map((point) => current.add(point))
+    : [];
+}
 
 /** Smooths the window's scrolling until the returned function is called. */
 export function smoothPageScroll() {
@@ -27,12 +46,45 @@ export function smoothPageScroll() {
   lenis.on("virtual-scroll", () => {
     destination = null;
   });
+  // Within half a screen of a resting point, a pause in the wheel pulls the
+  // page onto it.
+  const snap = new Snap(lenis, {
+    type: "proximity",
+    distanceThreshold: "50%",
+    debounce: 260,
+    duration: 0.9,
+    easing: easeInOutCubic,
+    onSnapStart: ({ value }) => {
+      destination = value;
+    },
+    onSnapComplete: () => {
+      destination = null;
+    },
+  });
   page = lenis;
+  magnet = snap;
+  syncMagnet();
   return () => {
+    snap.destroy();
     lenis.destroy();
     if (page !== lenis) return;
     page = null;
+    magnet = null;
+    releaseMagnetPoints = [];
     destination = null;
+  };
+}
+
+/**
+ * Makes the page settle on these scroll positions, in pixels, when the wheel
+ * leaves it close to one of them. Returns the function that removes them.
+ */
+export function magnetizeScroll(points: number[]) {
+  magnetPoints.add(points);
+  syncMagnet();
+  return () => {
+    magnetPoints.delete(points);
+    syncMagnet();
   };
 }
 
@@ -80,6 +132,11 @@ export function scrollPageTo(top: number, instant = false) {
 
 /** Holds the page still while something covers it, or releases it. */
 export function holdPageScroll(held: boolean) {
-  if (held) page?.stop();
-  else page?.start();
+  if (held) {
+    page?.stop();
+    magnet?.stop();
+  } else {
+    page?.start();
+    magnet?.start();
+  }
 }

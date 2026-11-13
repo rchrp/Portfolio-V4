@@ -139,7 +139,7 @@ export function MonitorStage({ children }: { children: ReactNode }) {
         if (disposed) return;
         const styles = getComputedStyle(document.body);
         renderer = new MonitorRenderer(canvas, {
-          sans: styles.getPropertyValue("--font-geist-sans") || "sans-serif",
+          sans: styles.getPropertyValue("--font-outfit") || "sans-serif",
           reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
           screens: monitorScreens,

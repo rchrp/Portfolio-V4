@@ -33,9 +33,17 @@ export function SiteHeader() {
 
   useEffect(() => {
     let frame = 0;
+    const root = document.documentElement;
+    const contact = document.getElementById("contact");
     const measure = () => {
       frame = 0;
       setPast(window.scrollY > window.innerHeight * 0.55);
+      // With the stage, its director sets the tone. Without it, the contact
+      // section darkens by itself: the header turns light once over it.
+      if (root.dataset.stage === "on" || !contact) return;
+      const { top } = contact.getBoundingClientRect();
+      root.dataset.tone =
+        top + window.innerHeight * 0.3 < 40 ? "dark" : "light";
     };
     const schedule = () => {
       if (!frame) frame = window.requestAnimationFrame(measure);

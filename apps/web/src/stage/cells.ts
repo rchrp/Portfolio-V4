@@ -153,6 +153,39 @@ export class CellGrid {
     }
   }
 
+  /**
+   * A crisp stroke: one whole cell at each step, no sharing between
+   * neighbours. For figures only a few cells across, which blur otherwise.
+   */
+  stroke(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    level0: number,
+    level1: number,
+    r: number,
+    g: number,
+    b: number,
+  ) {
+    const { spacing, originX, originY } = this;
+    const steps = Math.max(
+      1,
+      Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / spacing),
+    );
+    for (let step = 0; step <= steps; step += 1) {
+      const t = step / steps;
+      this.plot(
+        Math.round((x0 + (x1 - x0) * t - originX) / spacing),
+        Math.round((y0 + (y1 - y0) * t - originY) / spacing),
+        level0 + (level1 - level0) * t,
+        r,
+        g,
+        b,
+      );
+    }
+  }
+
   /** A soft round glow: full at its centre, gone at `radius`. */
   glow(
     x: number,

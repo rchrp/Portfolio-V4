@@ -134,6 +134,14 @@ html[data-tone="dark"] .site-header {
   visibility: visible;
 }
 
+@media (max-width: 30rem) {
+  .site-mark {
+    /* The square alone: the name would crowd the links. */
+    font-size: 0;
+    gap: 0;
+  }
+}
+
 .site-mark-dot {
   width: 0.5rem;
   height: 0.5rem;
@@ -424,14 +432,6 @@ html:not([data-stage="on"]) .contact {
   color: #ff9a55;
 }
 
-.contact-lead {
-  max-width: 30rem;
-  margin: 1.6rem 0 0;
-  color: var(--night-soft);
-  font-size: clamp(1rem, 1.25vw, 1.15rem);
-  line-height: 1.55;
-}
-
 .contact-ways {
   display: grid;
   margin: clamp(2.25rem, 6svh, 3.5rem) 0 0;
@@ -534,6 +534,12 @@ html:not([data-stage="on"]) .contact {
 }
 
 .work-sticky {
+  /* Where the cover in focus sits. The stage sets these to the pixel; the
+     values here stand in until it does, and where it cannot run. */
+  --card-x: 64.5vw;
+  --card-y: 50svh;
+  --card-width: min(54vw, clamp(230px, 52svh, 600px) * 16 / 9);
+  --card-height: calc(var(--card-width) * 9 / 16);
   position: sticky;
   top: 0;
   height: 100svh;
@@ -753,6 +759,12 @@ html[data-stage="off"] .work-cover img {
 }
 
 @media (max-width: 51.99rem) {
+  .work-sticky {
+    --card-x: 50vw;
+    --card-y: 34svh;
+    --card-width: min(88vw, 34svh * 16 / 9);
+  }
+
   .work-head {
     top: 4.6rem;
   }
@@ -778,12 +790,27 @@ html[data-stage="off"] .work-cover img {
     margin-top: 1.3rem;
   }
 
+  /* The squares run along the bottom instead of down the edge. */
   .work-pager {
-    right: 0.1rem;
+    top: auto;
+    right: auto;
+    bottom: 1.25rem;
+    left: 50%;
+    grid-auto-flow: column;
+    transform: translateX(-50%);
+  }
+
+  .work-pager button {
+    width: 1.4rem;
+    height: 1.75rem;
   }
 
   .work-pager span {
     display: none;
+  }
+
+  .work-cover {
+    rotate: -1deg;
   }
 }
 
@@ -1162,7 +1189,7 @@ html[data-stage="off"] .detail-cover img {
 
 .gallery-track {
   position: relative;
-  height: clamp(13rem, 54svh, 36rem);
+  height: clamp(11rem, min(54svh, 62vw), 36rem);
   cursor: grab;
   touch-action: pan-y;
   user-select: none;
@@ -1217,9 +1244,11 @@ html:not([data-stage="on"]) .gallery-picture {
   gap: 0.9rem;
   color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .gallery-controls button {
+  flex: none;
   display: grid;
   place-items: center;
   width: 2.75rem;

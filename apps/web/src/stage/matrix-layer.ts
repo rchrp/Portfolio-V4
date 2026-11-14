@@ -99,10 +99,12 @@ void main() {
   float restSize = uRestSize * (0.72 + 0.5 * grain) * (1.0 + uBreath * wave * 0.55);
   float restAlpha = uRestAlpha * (0.55 + 0.75 * grain) * (1.0 + uBreath * wave * 0.4);
   restAlpha *= mix(1.0, 0.7, calm);
-  restSize += glow * 0.3 + halo * 0.13;
-  restAlpha = min(1.0, restAlpha + glow * 0.5 + halo * 0.2);
+  // The pointer's light keeps to a glimmer where there is text to read.
+  float lit = glow * mix(1.0, 0.3, calm);
+  restSize += lit * 0.3 + halo * 0.13;
+  restAlpha = min(1.0, restAlpha + lit * 0.5 + halo * 0.2);
   vec3 restColor = mix(uRest, uHaloColor, min(1.0, halo * 0.9));
-  restColor = mix(restColor, uLightColor, min(1.0, glow * 1.15));
+  restColor = mix(restColor, uLightColor, min(1.0, lit * 1.15));
 
   // A figure grows out of the resting dot, taking its colour as it does.
   float size = mix(restSize, 0.88, level);

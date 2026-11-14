@@ -174,7 +174,7 @@ void main() {
   mask *= mix(1.0, gap, smoothstep(0.02, 0.2, uPixel));
 
   // What bends away sinks into the paper.
-  float far = clamp(uDim + vDepth * 3.4, 0.0, 1.0);
+  float far = clamp(uDim + vDepth * 2.3, 0.0, 1.0);
   color = mix(color, uPaper, far);
 
   float alpha = mask * uAlpha;

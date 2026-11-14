@@ -31,7 +31,9 @@ export function HomeDirector() {
     image
       .decode()
       .then(() => {
-        if (!cancelled) stage.portrait.setImage(image);
+        if (cancelled) return;
+        stage.portrait.setImage(image);
+        stage.invalidate();
       })
       .catch(() => {});
 

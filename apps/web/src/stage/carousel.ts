@@ -14,6 +14,11 @@ export type CarouselLayout = {
   y: number;
   width: number;
   height: number;
+  /**
+   * Which way the covers travel: down a column on wide screens, along a row
+   * on narrow ones, where the column would run through the text.
+   */
+  sideways: boolean;
 };
 
 export type Rect = { left: number; top: number; width: number; height: number };
@@ -80,6 +85,7 @@ export class Carousel {
       y: narrow ? height * 0.34 : height * 0.5,
       width: cardWidth,
       height: cardHeight,
+      sideways: narrow,
     };
   }
 
@@ -124,9 +130,11 @@ export class Carousel {
     if (!visible && this.open === 0) return moving;
 
     const layout = Carousel.layout(width, height);
-    const gap = layout.height * GAP;
+    const { sideways } = layout;
+    const gap = sideways ? layout.width * 1.07 : layout.height * GAP;
     const rush = Math.min(1, Math.abs(this.velocity) * 0.22);
-    const curve = (1 / (height * 1.02)) * (1 + rush * 0.35);
+    const curve =
+      (1 / ((sideways ? width : height) * 1.02)) * (1 + rush * 0.35);
     const pivot = layout.y + shift;
 
     // From the farthest to the nearest, so the cover in focus is drawn last.
@@ -143,16 +151,20 @@ export class Carousel {
 
       const card: CardDraw = {
         src: this.sources[index],
-        x: layout.x + offset * gap * SLANT,
-        y: layout.y + shift + offset * gap,
+        x: sideways ? layout.x + offset * gap : layout.x + offset * gap * SLANT,
+        y: sideways
+          ? layout.y + shift + offset * gap * SLANT * 0.4
+          : layout.y + shift + offset * gap,
         width: layout.width,
         height: layout.height,
-        curveY: curve,
+        curveY: sideways ? 0 : curve,
         pivotY: pivot,
-        roll: ROLL,
+        curveX: sideways ? curve : 0,
+        pivotX: layout.x,
+        roll: sideways ? ROLL * 0.5 : ROLL,
         alpha: 1 - smoothstep(1.45, 2.3, distance),
         pixel: clamp01(smoothstep(0.1, 0.95, distance) + rush * 0.5),
-        dim: 0.5 * smoothstep(0.15, 1.3, distance),
+        dim: 0.36 * smoothstep(0.15, 1.3, distance),
         shadow: 1 - smoothstep(0, 0.7, distance),
         radius: 12,
       };
@@ -163,8 +175,9 @@ export class Carousel {
           card.y = lerp(card.y, cover.top + cover.height / 2, opened);
           card.width = lerp(card.width, cover.width, opened);
           card.height = lerp(card.height, cover.height, opened);
-          card.curveY = curve * (1 - opened);
-          card.roll = ROLL * (1 - opened);
+          card.curveY = (card.curveY ?? 0) * (1 - opened);
+          card.curveX = (card.curveX ?? 0) * (1 - opened);
+          card.roll = (card.roll ?? 0) * (1 - opened);
           card.pixel = (card.pixel ?? 0) * (1 - opened);
           card.dim = (card.dim ?? 0) * (1 - opened);
           card.shadow = lerp(card.shadow ?? 0, 0.55, opened);
@@ -173,7 +186,9 @@ export class Carousel {
         } else {
           // The others step aside.
           card.alpha = (card.alpha ?? 1) * (1 - smoothstep(0, 0.55, opened));
-          card.y += Math.sign(offset || 1) * opened * height * 0.3;
+          const aside = Math.sign(offset || 1) * opened;
+          if (sideways) card.x += aside * width * 0.3;
+          else card.y += aside * height * 0.3;
         }
       }
 

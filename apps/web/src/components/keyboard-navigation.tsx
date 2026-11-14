@@ -65,8 +65,8 @@ export function KeyboardNavigation() {
         event.ctrlKey ||
         event.metaKey ||
         event.shiftKey ||
-        // The full-screen showcase handles its own keys.
-        document.querySelector("dialog[open]") ||
+        // A project's page handles its own keys.
+        document.querySelector("dialog[open], [role=dialog]") ||
         (event.target instanceof Element && event.target.closest(ownArrowKeys))
       ) {
         return;

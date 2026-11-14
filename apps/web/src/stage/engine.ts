@@ -124,7 +124,11 @@ export class StageEngine {
       this.onPointerLeave,
     );
     window.addEventListener("blur", this.onPointerLeave);
-    window.addEventListener("scroll", this.invalidate, { passive: true });
+    // Any scrolling box: the page, or a project's own.
+    document.addEventListener("scroll", this.invalidate, {
+      capture: true,
+      passive: true,
+    });
     document.addEventListener("visibilitychange", this.onVisibility);
 
     this.resize();
@@ -484,7 +488,7 @@ export class StageEngine {
       this.onPointerLeave,
     );
     window.removeEventListener("blur", this.onPointerLeave);
-    window.removeEventListener("scroll", this.invalidate);
+    document.removeEventListener("scroll", this.invalidate, { capture: true });
     document.removeEventListener("visibilitychange", this.onVisibility);
     for (const layer of this.layers.splice(0)) layer.dispose();
     this.cards.dispose();

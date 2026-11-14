@@ -1,17 +1,11 @@
-// Editorial copy of the single-page story, kept in one place to be edited
-// without touching the components.
-
-// The story's chapters, in page order: `id` is the id of each section.
-export const chapters = [
-  { id: "accueil", label: "Accueil" },
-  { id: "manifeste", label: "Manifeste" },
-  { id: "projets", label: "Projets" },
-  { id: "contact", label: "Contact" },
-];
+// Editorial copy of the home page, kept in one place to be edited without
+// touching the components.
 
 export const hero = {
   firstName: "Raphaël",
   lastName: "Charpentier",
+  role: "Software engineer · Freelance",
+  lead: "Disponible pour des missions freelance : produits web, interfaces sur mesure et expériences interactives.",
 };
 
 export const manifesto = {
@@ -24,12 +18,7 @@ export const manifesto = {
   ],
 };
 
-export const projectsChapter = {
-  title: "Mes projets",
-  lead: "Une sélection de réalisations, une chaîne à la fois.",
-};
-
-// Public contact details, shown in the hero and the outro. Each one is
+// Public contact details, shown in the contact section. Each one is
 // displayed only once it is set.
 export const contact = {
   email: "raphael@rchrp.fr",
@@ -41,26 +30,4 @@ export const contact = {
 
 export const outro = {
   title: ["Un projet en tête\u00a0?", "Parlons-en."],
-  lead: "Disponible pour des missions freelance : produits web, interfaces sur mesure et expériences interactives.",
-};
-
-// What the monitor's glass says around the chapters it carries.
-export const monitorCopy = {
-  manifestoKicker: "01 — Manifeste",
-  // Shown as the projects come in.
-  terminal: { kicker: "02", text: "Mes projets" },
-  ctaKicker: "03 — Contact",
-  contactKicker: "Contact",
-  close: "Fermer",
-};
-
-// Third-party assets that require attribution (see README).
-export const credits = {
-  model: {
-    title: "Monitor IV",
-    url: "https://sketchfab.com/3d-models/monitor-iv-c22e137779e7439b8825bf734de9a471",
-    author: "re1monsen",
-    license: "CC BY 4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-  },
 };

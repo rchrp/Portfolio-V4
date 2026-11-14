@@ -18,18 +18,30 @@ const pad = (value: number) => String(value).padStart(2, "0");
 // the middle faces the reader, its neighbours turn away and break up into
 // matrix cells. The stage draws the pictures where the track sits; the page
 // keeps the controls, the caption and, without the stage, the pictures.
-export function ProjectGallery({ images }: { images: ProjectMedia[] }) {
+export function ProjectGallery({
+  images,
+  leaving,
+}: {
+  images: ProjectMedia[];
+  /** The page is on its way out: the pictures fade with it. */
+  leaving: boolean;
+}) {
   const stage = useStage();
   const trackRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const indexRef = useRef(0);
   /** Distance dragged, in pictures. */
   const dragRef = useRef({ active: false, startX: 0, offset: 0, moved: false });
+  const leavingRef = useRef(leaving);
+  useEffect(() => {
+    leavingRef.current = leaving;
+  }, [leaving]);
 
   const go = (to: number) => {
     const next = clamp(to, 0, images.length - 1);
     indexRef.current = next;
     setIndex(next);
+    stage?.invalidate();
   };
 
   useEffect(() => {
@@ -37,12 +49,19 @@ export function ProjectGallery({ images }: { images: ProjectMedia[] }) {
     const track = trackRef.current;
     if (!track) return;
     let position = indexRef.current;
+    let presence = 1;
     for (const image of images) stage.cards.preload(image.url);
 
     return stage.direct((engine, dt) => {
       const bounds = track.getBoundingClientRect();
       const viewport = window.innerHeight;
       if (bounds.bottom < -80 || bounds.top > viewport + 80) return;
+
+      if (leavingRef.current) {
+        presence = engine.still ? 0 : Math.max(0, presence - dt / 0.22);
+        engine.wake();
+      }
+      if (presence <= 0) return;
 
       const drag = dragRef.current;
       const height = bounds.height * 0.94;
@@ -70,7 +89,7 @@ export function ProjectGallery({ images }: { images: ProjectMedia[] }) {
           height: cardHeight,
           curveX: 1 / (engine.width * 0.78),
           pivotX: centerX,
-          alpha: 1 - smoothstep(1.5, 2.3, distance),
+          alpha: presence * (1 - smoothstep(1.5, 2.3, distance)),
           pixel: 0.85 * smoothstep(0.15, 1, distance),
           dim: 0.4 * smoothstep(0.15, 1.2, distance),
           shadow: 0.8 * (1 - smoothstep(0, 0.7, distance)),

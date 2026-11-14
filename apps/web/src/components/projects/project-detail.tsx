@@ -162,7 +162,9 @@ export function ProjectDetail({
           </ul>
         )}
 
-        {project.media.length > 0 && <ProjectGallery images={project.media} />}
+        {project.media.length > 0 && (
+          <ProjectGallery images={project.media} leaving={leaving} />
+        )}
 
         <section className="detail-close" aria-label="Technologies et liens">
           {project.technologies.length > 0 && (

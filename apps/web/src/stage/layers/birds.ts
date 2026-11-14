@@ -27,17 +27,17 @@ export class Murmuration implements Layer {
   private readonly span: number;
 
   constructor(frame: WorldFrame, options: BirdOptions = {}) {
-    this.span = options.span ?? 38;
+    this.span = options.span ?? 46;
     const count =
       options.count ??
-      Math.round(clamp((frame.width * frame.height) / 26000, 18, 54));
+      Math.round(clamp((frame.width * frame.height) / 36000, 14, 38));
     const startX = frame.width * randomBetween(0.3, 0.7);
     const startY = frame.height * randomBetween(0.3, 0.6);
     for (let index = 0; index < count; index += 1) {
       const angle = randomBetween(0, TAU);
       this.flock.push({
-        x: startX + Math.cos(angle) * randomBetween(0, 220),
-        y: startY + Math.sin(angle) * randomBetween(0, 160),
+        x: startX + Math.cos(angle) * randomBetween(0, 320),
+        y: startY + Math.sin(angle) * randomBetween(0, 220),
         vx: randomBetween(-60, 60),
         vy: randomBetween(-40, 40),
         phase: randomBetween(0, TAU),
@@ -61,43 +61,44 @@ export class Murmuration implements Layer {
         0.3 * Math.sin(time * 0.157 + 1.3) +
         0.08 * (noise2(time * 0.2, 4, 51) - 0.5));
 
-    let meanX = 0;
-    let meanY = 0;
-    let meanVx = 0;
-    let meanVy = 0;
+    const sight = 150;
+    const personal = 68;
     for (const bird of flock) {
-      meanX += bird.x;
-      meanY += bird.y;
-      meanVx += bird.vx;
-      meanVy += bird.vy;
-    }
-    meanX /= flock.length;
-    meanY /= flock.length;
-    meanVx /= flock.length;
-    meanVy /= flock.length;
-
-    const personal = 34;
-    for (const bird of flock) {
-      // Together, in step, towards the roaming point.
-      let ax = (meanX - bird.x) * 0.55 + (meanVx - bird.vx) * 1.1;
-      let ay = (meanY - bird.y) * 0.55 + (meanVy - bird.vy) * 1.1;
-      ax += (leadX - bird.x) * 0.9;
-      ay += (leadY - bird.y) * 0.9;
-
-      // But not on top of each other.
+      // Each bird only minds the ones around it: it steers towards their
+      // middle, matches their pace, and keeps its distance. That is enough
+      // for the flock to stretch into ribbons and fold back on itself.
+      let centerX = 0;
+      let centerY = 0;
+      let paceX = 0;
+      let paceY = 0;
+      let near = 0;
+      let ax = 0;
+      let ay = 0;
       for (const other of flock) {
         if (other === bird) continue;
         const dx = bird.x - other.x;
         const dy = bird.y - other.y;
         const distanceSquared = dx * dx + dy * dy;
-        if (distanceSquared > personal * personal || distanceSquared === 0) {
-          continue;
+        if (distanceSquared > sight * sight || distanceSquared === 0) continue;
+        centerX += other.x;
+        centerY += other.y;
+        paceX += other.vx;
+        paceY += other.vy;
+        near += 1;
+        if (distanceSquared < personal * personal) {
+          const distance = Math.sqrt(distanceSquared);
+          const push = (1 - distance / personal) * 900;
+          ax += (dx / distance) * push;
+          ay += (dy / distance) * push;
         }
-        const distance = Math.sqrt(distanceSquared);
-        const push = (1 - distance / personal) * 620;
-        ax += (dx / distance) * push;
-        ay += (dy / distance) * push;
       }
+      if (near > 0) {
+        ax += (centerX / near - bird.x) * 0.3 + (paceX / near - bird.vx) * 1.6;
+        ay += (centerY / near - bird.y) * 0.3 + (paceY / near - bird.vy) * 1.6;
+      }
+      // A loose pull towards the roaming point keeps the flock on screen.
+      ax += (leadX - bird.x) * 0.2;
+      ay += (leadY - bird.y) * 0.2;
 
       // The pointer opens a hole in the flock.
       if (pointer.presence > 0) {
@@ -115,8 +116,8 @@ export class Murmuration implements Layer {
       bird.vx += ax * dt;
       bird.vy += ay * dt;
       const speed = Math.hypot(bird.vx, bird.vy) || 1;
-      const cruise = 150 * (0.6 + 0.4 * bird.depth);
-      const limited = clamp(speed, cruise * 0.55, cruise * 1.6);
+      const cruise = 135 * (0.6 + 0.4 * bird.depth);
+      const limited = clamp(speed, cruise * 0.7, cruise * 1.5);
       bird.vx *= limited / speed;
       bird.vy *= limited / speed;
       bird.x += bird.vx * dt;
@@ -144,16 +145,15 @@ export class Murmuration implements Layer {
       const sweep = 1.95 + 0.45 * beat;
       const reach = wing * (0.72 + 0.28 * clamp01(0.5 - 0.5 * beat));
 
-      grid.splat(bird.x, bird.y, alpha, r, g, b);
       for (const side of [-1, 1]) {
         const angle = heading + sweep * side;
-        grid.line(
+        grid.stroke(
           bird.x,
           bird.y,
           bird.x + Math.cos(angle) * reach,
           bird.y + Math.sin(angle) * reach,
           alpha,
-          alpha * 0.45,
+          alpha * 0.55,
           r,
           g,
           b,

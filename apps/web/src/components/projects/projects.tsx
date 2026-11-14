@@ -224,6 +224,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       holdPageScroll(false);
       delete root.dataset.detail;
     }
+    stage?.invalidate();
   }, [openIndex, projects, stopOf, stage]);
 
   useEffect(

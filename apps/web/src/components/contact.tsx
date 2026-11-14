@@ -49,7 +49,6 @@ export function Contact() {
         <h2 id="contact-heading" className="contact-title">
           <span>{outro.title[0]}</span> <span>{outro.title[1]}</span>
         </h2>
-        <p className="contact-lead">{outro.lead}</p>
 
         <ul className="contact-ways">
           {email && (

@@ -47,10 +47,13 @@ export function Contact() {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry.isIntersecting) return;
+        // Disarmed as it is shown: an armed element would return to nothing
+        // once its entrance has played.
+        delete content.dataset.armed;
         content.dataset.shown = "";
         observer.disconnect();
       },
-      { threshold: 0.4 },
+      { threshold: 0.25 },
     );
     observer.observe(content);
     return () => {

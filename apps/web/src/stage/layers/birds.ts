@@ -27,10 +27,10 @@ export class Murmuration implements Layer {
   private readonly span: number;
 
   constructor(frame: WorldFrame, options: BirdOptions = {}) {
-    this.span = options.span ?? 46;
+    this.span = options.span ?? 66;
     const count =
       options.count ??
-      Math.round(clamp((frame.width * frame.height) / 36000, 14, 38));
+      Math.round(clamp((frame.width * frame.height) / 24000, 20, 60));
     const startX = frame.width * randomBetween(0.3, 0.7);
     const startY = frame.height * randomBetween(0.3, 0.6);
     for (let index = 0; index < count; index += 1) {
@@ -61,8 +61,8 @@ export class Murmuration implements Layer {
         0.3 * Math.sin(time * 0.157 + 1.3) +
         0.08 * (noise2(time * 0.2, 4, 51) - 0.5));
 
-    const sight = 150;
-    const personal = 68;
+    const sight = 180;
+    const personal = 84;
     for (const bird of flock) {
       // Each bird only minds the ones around it: it steers towards their
       // middle, matches their pace, and keeps its distance. That is enough

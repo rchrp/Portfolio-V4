@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Mail, Phone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { GitHubIcon, LinkedInIcon } from "@/components/social-icons";
 import { contact, outro } from "@/lib/site-content";
@@ -50,41 +50,44 @@ export function Contact() {
           <span>{outro.title[0]}</span> <span>{outro.title[1]}</span>
         </h2>
 
-        <ul className="contact-ways">
+        <div className="contact-ways">
           {email && (
-            <li>
-              <span className="contact-label">E-mail</span>
-              <a className="contact-value" href={`mailto:${email}`}>
-                {email}
-              </a>
+            <div className="contact-way contact-way-main">
+              <Mail size={18} aria-hidden="true" />
+              <a href={`mailto:${email}`}>{email}</a>
               <CopyButton value={email} label="l’adresse e-mail" />
-            </li>
+            </div>
           )}
           {phone && (
-            <li>
-              <span className="contact-label">Téléphone</span>
-              <a
-                className="contact-value"
-                href={`tel:${phone.replace(/[^+\d]/g, "")}`}
-              >
-                {phone}
-              </a>
+            <div className="contact-way glass">
+              <Phone size={18} aria-hidden="true" />
+              <a href={`tel:${phone.replace(/[^+\d]/g, "")}`}>{phone}</a>
               <CopyButton value={phone} label="le numéro" />
-            </li>
+            </div>
           )}
-        </ul>
+        </div>
 
         {(linkedin || github) && (
           <div className="contact-profiles">
             {linkedin && (
-              <a href={linkedin} target="_blank" rel="noopener noreferrer">
+              <a
+                className="button glass"
+                href={linkedin}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <LinkedInIcon size={17} />
                 LinkedIn
                 <span className="sr-only"> (nouvel onglet)</span>
               </a>
             )}
             {github && (
-              <a href={github} target="_blank" rel="noopener noreferrer">
+              <a
+                className="button glass"
+                href={github}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <GitHubIcon size={17} />
                 GitHub
                 <span className="sr-only"> (nouvel onglet)</span>
@@ -92,6 +95,7 @@ export function Contact() {
             )}
           </div>
         )}
+
         <p className="contact-footer">
           © {new Date().getFullYear()} Raphaël Charpentier
         </p>

@@ -34,7 +34,7 @@ export class Fireflies implements Layer {
     this.bottom = options.bottom ?? 0.95;
     const count =
       options.count ??
-      Math.round(clamp((frame.width * frame.height) / 42000, 12, 44));
+      Math.round(clamp((frame.width * frame.height) / 24000, 20, 80));
     for (let index = 0; index < count; index += 1) {
       this.swarm.push({
         x: randomBetween(0, frame.width),
@@ -105,7 +105,7 @@ export class Fireflies implements Layer {
       const light = presence * pulse * (0.45 + 0.55 * firefly.depth);
       if (light < 0.04) continue;
       const fog = (1 - firefly.depth) * 0.45;
-      const radius = grid.spacing * (1.6 + 2.2 * firefly.depth);
+      const radius = grid.spacing * (2.4 + 3.4 * firefly.depth);
       grid.glow(
         firefly.x,
         firefly.y,

@@ -108,6 +108,25 @@ export class CellGrid {
     this.blue[index] = b;
   }
 
+  /** Sets a cell outright, whatever it showed: for a detail on a figure. */
+  paint(
+    column: number,
+    row: number,
+    level: number,
+    r: number,
+    g: number,
+    b: number,
+  ) {
+    if (column < 0 || row < 0 || column >= this.cols || row >= this.rows) {
+      return;
+    }
+    const index = row * this.cols + column;
+    this.level[index] = level > 1 ? 1 : level;
+    this.red[index] = r;
+    this.green[index] = g;
+    this.blue[index] = b;
+  }
+
   /**
    * A point of light at any position: its level is shared between the four
    * cells around it, so it glides from cell to cell instead of jumping.

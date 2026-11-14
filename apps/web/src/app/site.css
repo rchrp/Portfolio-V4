@@ -23,6 +23,75 @@
   z-index: 1;
 }
 
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(1.1rem);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The matrix comes up out of the paper as the page opens. */
+  .stage {
+    animation: fade-in 700ms ease both;
+  }
+}
+
+/* -- Glass ----------------------------------------------------------------- */
+
+/* What floats over the matrix is a pane of glass: it blurs what passes behind
+   and, in Chromium, bends it (see GlassFilter). One solid button per screen
+   keeps the call to action apart. */
+.glass {
+  --glass-tint: rgb(255 255 255 / 0.3);
+  --glass-rim: rgb(255 255 255 / 0.8);
+  --glass-line: rgb(43 27 17 / 0.1);
+  border: 1px solid var(--glass-line);
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: blur(9px) saturate(170%);
+  backdrop-filter: blur(9px) saturate(170%);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    inset 0 -1px 0 rgb(43 27 17 / 0.06),
+    0 10px 24px -14px rgb(43 27 17 / 0.3);
+  transition:
+    background-color 260ms ease,
+    border-color 260ms ease,
+    color 260ms ease;
+}
+
+html.liquid .glass {
+  -webkit-backdrop-filter: url(#liquid-glass) blur(5px) saturate(170%);
+  backdrop-filter: url(#liquid-glass) blur(5px) saturate(170%);
+}
+
+:is(a, button).glass:is(:hover, :focus-visible) {
+  --glass-tint: rgb(255 255 255 / 0.62);
+  --glass-line: rgb(43 27 17 / 0.22);
+}
+
+/* On the night: the glass is smoked rather than milky. */
+html[data-tone="dark"] .site-header .glass,
+.contact .glass {
+  --glass-tint: rgb(255 255 255 / 0.07);
+  --glass-rim: rgb(255 255 255 / 0.2);
+  --glass-line: rgb(255 255 255 / 0.13);
+}
+
+html[data-tone="dark"]
+  .site-header
+  :is(a, button).glass:is(:hover, :focus-visible),
+.contact :is(a, button).glass:is(:hover, :focus-visible) {
+  --glass-tint: rgb(255 255 255 / 0.16);
+  --glass-line: rgb(255 255 255 / 0.3);
+}
+
 /* -- Buttons --------------------------------------------------------------- */
 
 .button {
@@ -31,7 +100,6 @@
   gap: 0.7rem;
   min-height: 3rem;
   padding: 0 1.4rem;
-  border: 1px solid transparent;
   border-radius: 999px;
   color: inherit;
   font: inherit;
@@ -40,30 +108,20 @@
   letter-spacing: -0.01em;
   text-decoration: none;
   cursor: pointer;
-  transition:
-    background-color 260ms ease,
-    border-color 260ms ease,
-    color 260ms ease,
-    transform 260ms var(--ease);
 }
 
 .button-solid {
+  border: 1px solid transparent;
   background: var(--ink);
   color: var(--paper);
+  transition:
+    background-color 260ms ease,
+    color 260ms ease;
 }
 
 .button-solid:is(:hover, :focus-visible) {
   background: var(--accent);
   color: #fff;
-}
-
-.button-quiet {
-  padding-inline: 0.4rem;
-  background: none;
-}
-
-.button-quiet:is(:hover, :focus-visible) {
-  color: var(--accent-deep);
 }
 
 /* Three squares of the matrix, stepping down. */
@@ -95,13 +153,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
-  padding: clamp(1.1rem, 2.2vw, 1.75rem) var(--page-gutter);
+  padding: clamp(0.9rem, 1.8vw, 1.4rem) var(--page-gutter);
   color: var(--ink);
   font-size: 0.95rem;
   font-weight: 500;
   letter-spacing: -0.01em;
   pointer-events: none;
-  transition: color 500ms ease;
+  transition:
+    color 500ms ease,
+    opacity 420ms ease;
 }
 
 html[data-tone="dark"] .site-header {
@@ -118,28 +178,8 @@ html[data-tone="dark"] .site-header {
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  opacity: 0;
-  transform: translateY(-0.4rem);
-  transition:
-    opacity 420ms ease,
-    transform 420ms var(--ease),
-    visibility 0s linear 420ms;
-  visibility: hidden;
-}
-
-.site-header[data-past-hero] .site-mark {
-  opacity: 1;
-  transform: none;
-  transition-delay: 0s;
-  visibility: visible;
-}
-
-@media (max-width: 30rem) {
-  .site-mark {
-    /* The square alone: the name would crowd the links. */
-    font-size: 0;
-    gap: 0;
-  }
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
 }
 
 .site-mark-dot {
@@ -151,103 +191,155 @@ html[data-tone="dark"] .site-header {
 
 .site-nav {
   display: flex;
-  gap: clamp(1.1rem, 2.4vw, 2.25rem);
+  gap: 0.15rem;
   margin-left: auto;
+  padding: 0.3rem;
+  border-radius: 999px;
+  pointer-events: auto;
 }
 
 .site-nav a {
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  transition: background-color 240ms ease;
+}
+
+.site-nav a:is(:hover, :focus-visible) {
+  background: rgb(43 27 17 / 0.08);
+}
+
+html[data-tone="dark"] .site-nav a:is(:hover, :focus-visible) {
+  background: rgb(255 255 255 / 0.12);
+}
+
+@media (max-width: 26rem) {
+  .site-nav a {
+    padding-inline: 0.7rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .site-header {
+    animation: fade-in 800ms ease 500ms both;
+  }
+}
+
+/* -- The story: hero, then projects ---------------------------------------- */
+
+/* Both are held on screen while the page scrolls underneath. `--story` is
+   where the carousel stands: 0 on the hero, 1 on the first project. */
+.story {
+  --story: 0;
   position: relative;
-  padding: 0.35rem 0;
 }
 
-.site-nav a::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 1px;
-  content: "";
-  background: currentColor;
-  transform: scaleX(0);
-  transform-origin: right;
-  transition: transform 360ms var(--ease);
+.story-hero {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  height: 100svh;
+  overflow: clip;
 }
 
-.site-nav a:is(:hover, :focus-visible)::after {
-  transform: scaleX(1);
-  transform-origin: left;
+html[data-stage="off"] .story-hero {
+  background: var(--paper);
 }
 
 /* -- Hero ------------------------------------------------------------------ */
 
 .hero {
+  --name-width: min(53vw, 88svh);
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr);
-  align-items: center;
-  gap: clamp(1rem, 3vw, 3rem);
-  min-height: 100svh;
-  padding: 6rem var(--page-gutter) 0;
-  overflow: clip;
+  height: 100%;
 }
 
-html[data-stage="off"] .hero {
-  background: var(--paper);
+/* The hero's words leave as soon as it starts drawing back into a card. */
+.hero-main {
+  position: absolute;
+  top: 50%;
+  left: var(--page-gutter);
+  width: var(--name-width);
+  opacity: clamp(0, calc(1 - var(--story) * 9), 1);
+  transform: translateY(-52%);
+}
+
+.story:has(.work-sticky[data-shown]) .hero-main {
+  visibility: hidden;
+}
+
+/* The first name is drawn by the stage, in the matrix: the heading itself
+   stays for assistive technologies, and shows where the stage cannot run. */
+.hero-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+html[data-stage="off"] .hero-name {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  font-size: clamp(3rem, 9vw, 8rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+  white-space: normal;
+}
+
+html[data-stage="off"] .hero-name span {
+  display: block;
+  color: var(--brown);
+  font-size: 0.42em;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+/* Where the stage sets the first name: an empty box of the word's shape. */
+.hero-name-slot {
+  aspect-ratio: 3.55 / 1;
+}
+
+html[data-stage="off"] .hero-name-slot {
+  display: none;
 }
 
 .hero-copy {
-  max-width: 36rem;
-  padding-bottom: 9svh;
-}
-
-.hero-role {
-  margin: 0 0 1.4rem;
-  color: var(--ink-soft);
-  font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-.hero-name {
-  margin: 0;
-  font-size: clamp(2.9rem, 6.4vw, 6rem);
-  font-weight: 500;
-  letter-spacing: -0.045em;
-  line-height: 0.98;
-}
-
-.hero-name span {
-  display: block;
-}
-
-.hero-name span:last-child {
-  color: var(--brown);
+  max-width: 31rem;
+  margin-top: clamp(1.25rem, 3.4svh, 2.25rem);
 }
 
 .hero-lead {
-  max-width: 27rem;
-  margin: 1.9rem 0 0;
+  margin: 0;
   color: var(--ink-soft);
-  font-size: clamp(1rem, 1.25vw, 1.15rem);
+  font-size: clamp(1rem, 1.2vw, 1.125rem);
   line-height: 1.55;
+  text-wrap: pretty;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.9rem 1.25rem;
-  margin-top: 2.4rem;
+  gap: 0.75rem;
+  margin-top: clamp(1.4rem, 3.6svh, 2.1rem);
 }
 
 /* Where the stage draws the portrait: an empty box that only reserves the
-   place, standing on the bottom edge of the screen. */
+   place. It is taller than the screen: the photograph stands lower than its
+   frame, cut below the chest. */
 .hero-portrait {
-  align-self: end;
-  justify-self: end;
-  width: min(100%, calc(94svh * 0.75));
+  position: absolute;
+  top: -1.5svh;
+  left: calc(71vw - 49.5svh);
+  height: 132svh;
   aspect-ratio: 3 / 4;
-  max-height: 94svh;
 }
 
 .hero-portrait-fallback {
@@ -263,130 +355,270 @@ html[data-stage="off"] .hero-portrait-fallback {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  /* The words come last, once the name has risen and the portrait is
+     condensing. */
   .hero-copy > * {
-    animation: rise-in 900ms var(--ease) both;
+    animation: rise-in 900ms var(--ease) 1500ms both;
   }
 
   .hero-copy > :nth-child(2) {
-    animation-delay: 90ms;
+    animation-delay: 1650ms;
   }
 
-  .hero-copy > :nth-child(3) {
-    animation-delay: 200ms;
-  }
-
-  .hero-copy > :nth-child(4) {
-    animation-delay: 300ms;
+  html[data-stage="off"] .hero-copy > * {
+    animation: none;
   }
 }
 
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(1.1rem);
-  }
-}
-
-@media (max-width: 52rem) {
+/* Narrow or tall screens: the name across the top, the portrait below. */
+@media (max-width: 51.99rem), (max-aspect-ratio: 13 / 10) {
   .hero {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
-    align-items: start;
-    gap: 0;
-    padding-top: 5.5rem;
+    --name-width: calc(100vw - 2 * var(--page-gutter));
+  }
+
+  .hero-main {
+    top: clamp(4.75rem, 11svh, 7rem);
+    transform: none;
+  }
+
+  .hero-name-slot {
+    width: min(100%, 34rem);
   }
 
   .hero-copy {
-    padding-bottom: 1.5rem;
+    margin-top: 0.9rem;
   }
 
   .hero-lead {
-    margin-top: 1.25rem;
+    font-size: 0.975rem;
+    line-height: 1.5;
   }
 
   .hero-actions {
-    margin-top: 1.6rem;
+    margin-top: 1.1rem;
   }
 
   .hero-portrait {
-    justify-self: center;
-    width: min(100%, 26rem);
-    max-height: none;
+    top: calc(52svh - 6svh);
+    left: 50%;
+    height: 78svh;
+    translate: -50% 0;
   }
 }
 
-/* -- About ----------------------------------------------------------------- */
+/* -- Projects: the carousel ------------------------------------------------ */
 
-.about {
-  --read: 0;
-  display: grid;
-  align-content: center;
-  gap: clamp(3rem, 9svh, 6rem);
-  min-height: 100svh;
-  padding: clamp(6rem, 16svh, 10rem) var(--page-gutter);
+/* The track gives the story its length: one screen for the hero, then a
+   step of scroll per project. It starts where the hero does, over it. */
+.work {
+  position: relative;
+  z-index: 2;
+  height: calc(100svh + var(--count) * var(--step) * 100svh);
+  margin-top: -100svh;
+  pointer-events: none;
 }
 
-html[data-stage="off"] .about {
-  background: var(--paper);
+.work-anchor {
+  position: absolute;
+  top: calc(var(--step) * 100svh);
+  width: 1px;
+  height: 1px;
 }
 
-.about-statement {
-  max-width: 21em;
-  margin: 0;
-  font-size: clamp(1.75rem, 3.5vw, 3.25rem);
-  font-weight: 400;
+.work-sticky {
+  /* Where the cover in focus sits. The stage sets these to the pixel on the
+     story; the values here stand in until it does, and where it cannot. */
+  --card-x: 59.5vw;
+  --card-y: 50svh;
+  --card-width: min(60vw, clamp(260px, 64svh, 760px) * 16 / 9);
+  --card-height: calc(var(--card-width) * 9 / 16);
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: clip;
+}
+
+.work-sticky > * {
+  pointer-events: auto;
+}
+
+.work-sticky:not([data-shown]) > * {
+  visibility: hidden;
+}
+
+/* The names, and nothing else: the one in focus is inked, the others wait. */
+.work-list {
+  position: absolute;
+  top: 50%;
+  left: var(--page-gutter);
+  width: max(
+    11rem,
+    calc(var(--card-x) - var(--card-width) / 2 - var(--page-gutter) - 2.5rem)
+  );
+  opacity: clamp(0, calc((var(--story) - 0.55) * 4), 1);
+  transform: translateY(-50%);
+}
+
+.work-list h2 {
+  margin: 0 0 1.1rem;
+  font-size: clamp(1.35rem, 1.9vw, 1.75rem);
+  font-weight: 500;
   letter-spacing: -0.03em;
-  line-height: 1.14;
-  text-wrap: balance;
 }
 
-/* Each word takes its ink as the reading reaches it. */
-.about-word {
-  opacity: clamp(0.16, calc(var(--read) * (var(--n) + 3) - var(--i)), 1);
-}
-
-.about-word[data-accent] {
-  color: var(--accent);
-}
-
-.about-disciplines {
+.work-list ol {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(1.5rem, 4vw, 4rem);
-  max-width: 62rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.about-disciplines li {
-  display: grid;
-  gap: 0.35rem;
-  padding-top: 1.1rem;
-  border-top: 1px solid var(--line);
-}
-
-.about-disciplines strong {
-  font-size: 1.05rem;
+.work-list button {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.34rem 0;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font: inherit;
+  font-size: clamp(0.95rem, 1.1vw, 1.05rem);
   font-weight: 500;
   letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 320ms ease,
+    transform 420ms var(--ease);
 }
 
-.about-disciplines span {
+.work-list button:is(:hover, :focus-visible) {
   color: var(--ink-soft);
-  font-size: 0.975rem;
 }
 
-@media (max-width: 44rem) {
-  .about-disciplines {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1.25rem;
+.work-list button[aria-current] {
+  color: var(--ink);
+  transform: translateX(0.9rem);
+}
+
+/* A square of the matrix marks the project in focus. */
+.work-list button::before {
+  position: absolute;
+  top: 50%;
+  left: -0.9rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 1px;
+  content: "";
+  background: var(--accent);
+  opacity: 0;
+  transform: translateY(-50%) scale(0.2);
+  transition:
+    opacity 320ms ease,
+    transform 420ms var(--ease);
+}
+
+.work-list button[aria-current]::before {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.work-number {
+  flex: none;
+  width: 1.4rem;
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.work-notice {
+  margin: 1.5rem 0 0;
+  color: var(--ink-faint);
+  font-size: 0.875rem;
+}
+
+/* The cover in focus, as the page sees it: a button exactly over the picture
+   the stage draws. */
+.work-cover {
+  position: absolute;
+  top: calc(var(--card-y) - var(--card-height) / 2);
+  left: calc(var(--card-x) - var(--card-width) / 2);
+  width: var(--card-width);
+  height: var(--card-height);
+  padding: 0;
+  border: 0;
+  background: none;
+  opacity: clamp(0, calc((var(--story) - 0.55) * 4), 1);
+  cursor: pointer;
+}
+
+.work-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+}
+
+html[data-stage="off"] .work-cover img {
+  opacity: 1;
+  box-shadow: 0 1.5rem 3rem rgb(43 27 17 / 0.16);
+}
+
+/* Says the cover opens, when it is pointed at or reached by keyboard. */
+.work-cover-hint {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0 1.1rem;
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.925rem;
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(0.4rem);
+  transition:
+    opacity 260ms ease,
+    transform 360ms var(--ease);
+}
+
+.work-cover:is(:hover, :focus-visible) .work-cover-hint {
+  opacity: 1;
+  transform: none;
+}
+
+@media (max-width: 51.99rem) {
+  .work-sticky {
+    --card-x: 50vw;
+    --card-y: 36svh;
+    --card-width: min(90vw, 36svh * 16 / 9);
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .about-word {
-    opacity: 1;
+  .work-list {
+    top: calc(
+      var(--card-y) + var(--card-height) / 2 + clamp(1.5rem, 5svh, 2.75rem)
+    );
+    right: var(--page-gutter);
+    left: calc(var(--page-gutter) + 0.9rem);
+    width: auto;
+    transform: none;
+  }
+
+  .work-list h2 {
+    margin-bottom: 0.7rem;
+    margin-left: -0.9rem;
+  }
+
+  .work-list button {
+    padding: 0.24rem 0;
+  }
+
+  .work-list button[aria-current] {
+    transform: none;
   }
 }
 
@@ -432,386 +664,77 @@ html:not([data-stage="on"]) .contact {
   color: #ff9a55;
 }
 
+/* Each way to answer is an object to pick up, not a row of a table. */
 .contact-ways {
-  display: grid;
-  margin: clamp(2.25rem, 6svh, 3.5rem) 0 0;
-  padding: 0;
-  border-bottom: 1px solid rgb(244 232 218 / 0.16);
-  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: clamp(2rem, 6svh, 3.25rem);
 }
 
-.contact-ways li {
-  display: grid;
-  grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+.contact-way {
+  display: inline-flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1.05rem 0;
-  border-top: 1px solid rgb(244 232 218 / 0.16);
-}
-
-.contact-label {
-  color: var(--night-soft);
-  font-size: 0.95rem;
-}
-
-.contact-value {
-  color: inherit;
-  font-size: clamp(1.15rem, 2vw, 1.6rem);
+  gap: 0.8rem;
+  min-height: 3.6rem;
+  padding: 0 0.5rem 0 1.3rem;
+  border-radius: 999px;
+  font-size: clamp(1.05rem, 1.5vw, 1.25rem);
   font-weight: 500;
-  letter-spacing: -0.02em;
-  text-decoration: none;
-  transition: color 240ms ease;
+  letter-spacing: -0.015em;
 }
 
-.contact-value:is(:hover, :focus-visible) {
-  color: #ff9a55;
+.contact-way a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.contact-way a:is(:hover, :focus-visible) {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.contact-way-main {
+  background: var(--night-ink);
+  color: var(--night);
 }
 
 .contact-copy {
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border: 1px solid rgb(244 232 218 / 0.2);
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 0;
   border-radius: 50%;
-  background: none;
-  color: var(--night-soft);
+  background: rgb(255 255 255 / 0.1);
+  color: inherit;
   cursor: pointer;
-  transition:
-    border-color 240ms ease,
-    color 240ms ease;
+  transition: background-color 240ms ease;
 }
 
 .contact-copy:is(:hover, :focus-visible) {
-  border-color: currentColor;
-  color: var(--night-ink);
+  background: rgb(255 255 255 / 0.22);
+}
+
+.contact-way-main .contact-copy {
+  background: rgb(24 14 9 / 0.08);
+}
+
+.contact-way-main .contact-copy:is(:hover, :focus-visible) {
+  background: rgb(24 14 9 / 0.16);
 }
 
 .contact-profiles {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 2rem;
-  margin-top: 1.75rem;
-}
-
-.contact-profiles a {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  color: var(--night-soft);
-  font-weight: 500;
-  text-decoration: none;
-  transition: color 240ms ease;
-}
-
-.contact-profiles a:is(:hover, :focus-visible) {
-  color: var(--night-ink);
+  gap: 0.75rem;
+  margin-top: 0.75rem;
 }
 
 .contact-footer {
   margin: clamp(2.5rem, 7svh, 4rem) 0 0;
   color: rgb(199 176 156 / 0.7);
   font-size: 0.875rem;
-}
-
-@media (max-width: 34rem) {
-  .contact-ways li {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .contact-label {
-    grid-column: 1 / -1;
-    margin-bottom: -0.6rem;
-  }
-}
-
-/* -- Projects: the carousel ------------------------------------------------ */
-
-.work {
-  position: relative;
-  /* One screen, plus the scroll that turns the carousel. */
-  height: calc(100svh + (var(--count) - 1) * var(--step) * 100svh);
-}
-
-.work-sticky {
-  /* Where the cover in focus sits. The stage sets these to the pixel; the
-     values here stand in until it does, and where it cannot run. */
-  --card-x: 64.5vw;
-  --card-y: 50svh;
-  --card-width: min(54vw, clamp(230px, 52svh, 600px) * 16 / 9);
-  --card-height: calc(var(--card-width) * 9 / 16);
-  position: sticky;
-  top: 0;
-  height: 100svh;
-  overflow: clip;
-}
-
-.work-head {
-  position: absolute;
-  top: clamp(5rem, 13svh, 7.5rem);
-  left: var(--page-gutter);
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-  color: var(--ink-soft);
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-.work-head h2,
-.work-head p {
-  margin: 0;
-  font: inherit;
-}
-
-.work-head h2 {
-  color: var(--ink);
-}
-
-.work-head p {
-  font-variant-numeric: tabular-nums;
-}
-
-.work-current {
-  display: inline-block;
-  color: var(--accent-deep);
-}
-
-.work-total {
-  color: var(--ink-faint);
-}
-
-/* What is needed to want to open the project, and nothing else. */
-.work-info {
-  position: absolute;
-  top: 50%;
-  left: var(--page-gutter);
-  width: min(
-    30rem,
-    calc(var(--card-x) - var(--card-width) / 2 - var(--page-gutter) - 3rem)
-  );
-  transform: translateY(-46%);
-}
-
-.work-kicker {
-  margin: 0 0 1.1rem;
-  color: var(--ink-soft);
-  font-size: 0.975rem;
-}
-
-.work-title {
-  margin: 0;
-  font-size: clamp(2.1rem, 4.2vw, 3.9rem);
-  font-weight: 500;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  text-wrap: balance;
-}
-
-.work-summary {
-  max-width: 26rem;
-  margin: 1.4rem 0 0;
-  color: var(--ink-soft);
-  font-size: clamp(1rem, 1.2vw, 1.1rem);
-  line-height: 1.55;
-}
-
-.work-open {
-  margin-top: 2rem;
-}
-
-/* The cover in focus, as the page sees it: an invisible button exactly over
-   the picture the stage draws. */
-.work-cover {
-  position: absolute;
-  top: calc(var(--card-y) - var(--card-height) / 2);
-  left: calc(var(--card-x) - var(--card-width) / 2);
-  width: var(--card-width);
-  height: var(--card-height);
-  padding: 0;
-  border: 0;
-  border-radius: 12px;
-  background: none;
-  cursor: pointer;
-  rotate: -2deg;
-}
-
-.work-cover img {
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  object-fit: cover;
-  opacity: 0;
-}
-
-html[data-stage="off"] .work-cover img {
-  opacity: 1;
-  box-shadow: 0 1.5rem 3rem rgb(43 27 17 / 0.16);
-}
-
-/* One square per project, down the right edge. */
-.work-pager {
-  position: absolute;
-  top: 50%;
-  right: calc(var(--page-gutter) * 0.55);
-  display: grid;
-  gap: 0.15rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  transform: translateY(-50%);
-}
-
-.work-pager button {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 1.75rem;
-  height: 1.4rem;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.work-pager button::before {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 1px;
-  content: "";
-  background: currentColor;
-  opacity: 0.22;
-  transition:
-    opacity 260ms ease,
-    transform 320ms var(--ease),
-    background-color 260ms ease;
-}
-
-.work-pager button:is(:hover, :focus-visible)::before {
-  opacity: 0.6;
-}
-
-.work-pager button[aria-current]::before {
-  background: var(--accent);
-  opacity: 1;
-  transform: scale(1.6);
-}
-
-/* The name appears beside the square it belongs to. */
-.work-pager span {
-  position: absolute;
-  right: 100%;
-  padding-right: 0.4rem;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-  white-space: nowrap;
-  opacity: 0;
-  transform: translateX(0.4rem);
-  transition:
-    opacity 240ms ease,
-    transform 320ms var(--ease);
-  pointer-events: none;
-}
-
-.work-pager button:is(:hover, :focus-visible) span {
-  opacity: 1;
-  transform: none;
-}
-
-.work-notice {
-  position: absolute;
-  bottom: 1.5rem;
-  left: var(--page-gutter);
-  margin: 0;
-  color: var(--ink-faint);
-  font-size: 0.875rem;
-}
-
-.work-loading,
-.work-empty {
-  display: grid;
-  place-items: center;
-  height: 100svh;
-  color: var(--ink-soft);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .work-info > * {
-    animation: rise-in 640ms var(--ease) both;
-  }
-
-  .work-info > :nth-child(2) {
-    animation-delay: 50ms;
-  }
-
-  .work-info > :nth-child(3) {
-    animation-delay: 110ms;
-  }
-
-  .work-info > :nth-child(4) {
-    animation-delay: 170ms;
-  }
-
-  .work-current {
-    animation: rise-in 420ms var(--ease) both;
-  }
-}
-
-@media (max-width: 51.99rem) {
-  .work-sticky {
-    --card-x: 50vw;
-    --card-y: 34svh;
-    --card-width: min(88vw, 34svh * 16 / 9);
-  }
-
-  .work-head {
-    top: 4.6rem;
-  }
-
-  .work-info {
-    top: calc(
-      var(--card-y) + var(--card-height) / 2 + clamp(1.5rem, 5svh, 3rem)
-    );
-    right: var(--page-gutter);
-    width: auto;
-    transform: none;
-  }
-
-  .work-kicker {
-    margin-bottom: 0.7rem;
-  }
-
-  .work-summary {
-    margin-top: 0.9rem;
-  }
-
-  .work-open {
-    margin-top: 1.3rem;
-  }
-
-  /* The squares run along the bottom instead of down the edge. */
-  .work-pager {
-    top: auto;
-    right: auto;
-    bottom: 1.25rem;
-    left: 50%;
-    grid-auto-flow: column;
-    transform: translateX(-50%);
-  }
-
-  .work-pager button {
-    width: 1.4rem;
-    height: 1.75rem;
-  }
-
-  .work-pager span {
-    display: none;
-  }
-
-  .work-cover {
-    rotate: -1deg;
-  }
 }
 
 /* -- A project's page ------------------------------------------------------ */
@@ -861,27 +784,13 @@ html:not([data-stage="on"]) .detail {
   gap: 0.55rem;
   min-height: 2.75rem;
   padding: 0 1.1rem 0 0.9rem;
-  border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgb(246 240 231 / 0.78);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
   color: inherit;
   font: inherit;
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
   pointer-events: auto;
-  transition:
-    border-color 240ms ease,
-    background-color 240ms ease,
-    color 240ms ease;
-}
-
-:is(.detail-back, .detail-return):is(:hover, :focus-visible) {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
 }
 
 .detail-page {
@@ -923,13 +832,11 @@ html:not([data-stage="on"]) .detail {
 .detail-cover {
   aspect-ratio: 16 / 9;
   margin: clamp(2.5rem, 7svh, 4.5rem) 0 0;
-  border-radius: 14px;
 }
 
 .detail-cover img {
   width: 100%;
   height: 100%;
-  border-radius: inherit;
   object-fit: cover;
   opacity: 0;
 }
@@ -1070,17 +977,6 @@ html[data-stage="off"] .detail-cover img {
   line-height: 1.5;
 }
 
-.button-outline {
-  border-color: var(--line);
-  background: rgb(246 240 231 / 0.6);
-}
-
-.button-outline:is(:hover, :focus-visible) {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
-}
-
 .detail-end {
   display: flex;
   flex-wrap: wrap;
@@ -1219,7 +1115,6 @@ html:not([data-stage="on"]) .gallery-picture {
   flex: 0 0 min(78vw, 56rem);
   width: min(78vw, 56rem);
   aspect-ratio: 16 / 9;
-  border-radius: 10px;
   object-fit: cover;
   scroll-snap-align: center;
 }
@@ -1253,22 +1148,9 @@ html:not([data-stage="on"]) .gallery-picture {
   place-items: center;
   width: 2.75rem;
   height: 2.75rem;
-  border: 1px solid var(--line);
   border-radius: 50%;
-  background: rgb(246 240 231 / 0.6);
   color: var(--ink);
   cursor: pointer;
-  transition:
-    border-color 240ms ease,
-    background-color 240ms ease,
-    color 240ms ease,
-    opacity 240ms ease;
-}
-
-.gallery-controls button:not(:disabled):is(:hover, :focus-visible) {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
 }
 
 .gallery-controls button:disabled {

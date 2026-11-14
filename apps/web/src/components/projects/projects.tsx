@@ -11,11 +11,7 @@ import {
 } from "react";
 import { useStage } from "@/components/stage/stage";
 import { projectWorld } from "@/lib/project-worlds";
-import {
-  projectPeriod,
-  type Project,
-  type ProjectCatalog,
-} from "@/lib/projects";
+import type { Project, ProjectCatalog } from "@/lib/projects";
 import {
   holdPageScroll,
   magnetizeScroll,
@@ -26,7 +22,7 @@ import { direction } from "@/stage/direction";
 import { clamp } from "@/stage/math";
 import { ProjectDetail } from "./project-detail";
 
-/** Scroll each project takes, in viewport heights. */
+/** Scroll each card takes, in viewport heights. */
 const STEP = 0.85;
 /** Milliseconds the project's page takes to leave. */
 const LEAVE_MS = 780;
@@ -36,19 +32,22 @@ const pad = (value: number) => String(value).padStart(2, "0");
 const coverOf = (project: Project) =>
   project.imageUrl ?? "/projects/placeholder.svg";
 
-// The projects: a carousel turned by the scroll, one project in focus at a
-// time with only what is needed to want to open it, and the project's own
-// page, which the cover in focus opens into.
+// The projects, as the rest of the story the hero opens. The stage draws the
+// carousel: the hero's card first, then one cover per project, on a roller
+// the scroll turns. The page keeps what is not a picture: the list of names,
+// where the project in focus is marked, the button laid over its cover, and
+// the project's own page, which that cover opens into.
 export function Projects({ catalog }: { catalog: ProjectCatalog }) {
   const { projects } = catalog;
   const stage = useStage();
   const params = useSearchParams();
-  const sectionRef = useRef<HTMLElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const stickyRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLElement | null>(null);
   const carouselRef = useRef<Carousel | null>(null);
-  const activeRef = useRef(0);
-  const [active, setActive] = useState(0);
+  /** Card in focus: 0 is the hero, 1 the first project. */
+  const focusRef = useRef(0);
+  const [focus, setFocus] = useState(0);
 
   // The open project follows the address, so the back button closes it and
   // a link can open one directly.
@@ -76,16 +75,17 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     return () => window.clearTimeout(timeout);
   }, [leaving]);
 
-  const sources = useMemo(() => projects.map(coverOf), [projects]);
+  // The first card of the carousel is the hero: it has no picture to load.
+  const sources = useMemo(() => ["", ...projects.map(coverOf)], [projects]);
 
-  /** Scroll position at which a project is in focus. */
-  const stopOf = useCallback((index: number) => {
-    const section = sectionRef.current;
-    if (!section) return 0;
+  /** Scroll position at which a card of the carousel is in focus. */
+  const stopOf = useCallback((card: number) => {
+    const track = trackRef.current;
+    if (!track) return 0;
     return (
-      section.getBoundingClientRect().top +
+      track.getBoundingClientRect().top +
       window.scrollY +
-      index * STEP * window.innerHeight
+      card * STEP * window.innerHeight
     );
   }, []);
 
@@ -94,13 +94,11 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       const project = projects[index];
       if (!project) return;
       const next = new URLSearchParams(window.location.search);
-      next.set("projet", project.slug);
       // Moving between projects replaces the entry: one step back closes.
-      if (new URLSearchParams(window.location.search).has("projet")) {
-        window.history.replaceState(null, "", `?${next}`);
-      } else {
-        window.history.pushState({ projet: true }, "", `?${next}`);
-      }
+      const replace = next.has("projet");
+      next.set("projet", project.slug);
+      if (replace) window.history.replaceState(null, "", `?${next}`);
+      else window.history.pushState({ projet: true }, "", `?${next}`);
     },
     [projects],
   );
@@ -120,32 +118,39 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     );
   }, []);
 
-  // The carousel itself: positions computed every frame from the scroll.
+  /** A name in the list: brings its project round, or opens it if it is. */
+  const choose = (index: number) => {
+    if (focusRef.current === index + 1) open(index);
+    else scrollPageTo(stopOf(index + 1));
+  };
+
+  // The carousel: positions computed every frame from the scroll.
   useEffect(() => {
     if (!stage) return;
-    const section = sectionRef.current;
+    const track = trackRef.current;
     const sticky = stickyRef.current;
-    if (!section || !sticky || sources.length === 0) return;
+    const story = track?.closest<HTMLElement>(".story");
+    if (!track || !sticky || !story) return;
     const carousel = new Carousel(sources);
     carouselRef.current = carousel;
     let laidOutFor = "";
     let faded = 1;
+    let told = -1;
 
     const release = stage.direct((engine, dt) => {
       const height = window.innerHeight;
-      const bounds = section.getBoundingClientRect();
+      const bounds = track.getBoundingClientRect();
       const target = clamp(
         -bounds.top / (STEP * height),
         0,
         sources.length - 1,
       );
-      const visible =
-        bounds.bottom > -height * 0.2 && bounds.top < height * 1.2;
-      const shift = sticky.getBoundingClientRect().top;
+      const visible = bounds.bottom > -height * 0.2 && bounds.top < height;
       const cover = coverRef.current?.getBoundingClientRect() ?? null;
-      // Past its last project, the section fades before night falls on
-      // the contact section: no dark words on a darkening page.
-      const fade = 1 - clamp((-shift / height - 0.04) / 0.36, 0, 1);
+      // Past its last project, the story fades before night falls on the
+      // contact section: no dark words on a darkening page.
+      const left = -sticky.getBoundingClientRect().top / height;
+      const fade = 1 - clamp((left - 0.04) / 0.36, 0, 1);
       if (fade !== faded) {
         faded = fade;
         sticky.style.opacity = fade.toFixed(3);
@@ -154,7 +159,6 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
         engine,
         dt,
         target,
-        shift,
         visible,
         cover,
         height,
@@ -162,10 +166,19 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       );
       if (moving) engine.wake();
 
-      const index = Math.round(target);
-      if (index !== activeRef.current) {
-        activeRef.current = index;
-        setActive(index);
+      // The page follows the carousel as drawn, not as asked for.
+      direction.story.position = carousel.position;
+      direction.story.opened = carousel.opened;
+      const rounded = Math.round(carousel.position * 500) / 500;
+      if (rounded !== told) {
+        told = rounded;
+        story.style.setProperty("--story", String(rounded));
+      }
+
+      const card = Math.round(target);
+      if (card !== focusRef.current) {
+        focusRef.current = card;
+        setFocus(card);
       }
 
       // The page's own controls follow the layout the stage draws.
@@ -173,7 +186,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       if (key !== laidOutFor) {
         laidOutFor = key;
         const layout = Carousel.layout(engine.width, height);
-        const style = sticky.style;
+        const style = story.style;
         style.setProperty("--card-x", `${layout.x}px`);
         style.setProperty("--card-y", `${layout.y}px`);
         style.setProperty("--card-width", `${layout.width}px`);
@@ -181,26 +194,29 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       }
     });
 
-    // Covers load once the page is idle, before the section is reached.
+    // Covers load once the page is idle, before they are scrolled to.
     const preload = window.setTimeout(() => {
-      for (const src of sources) stage.cards.preload(src);
-    }, 1200);
+      for (const src of sources) if (src) stage.cards.preload(src);
+    }, 1400);
 
     return () => {
       window.clearTimeout(preload);
       release();
       sticky.style.opacity = "";
+      story.style.removeProperty("--story");
+      direction.story.position = 0;
+      direction.story.opened = 0;
       carouselRef.current = null;
     };
   }, [stage, sources]);
 
-  // The wheel settles on a project rather than between two.
+  // The wheel settles on a card rather than between two.
   useEffect(() => {
     let release = () => {};
     const place = () => {
       release();
       release = magnetizeScroll(
-        projects.map((_, index) => Math.round(stopOf(index))),
+        sources.map((_, card) => Math.round(stopOf(card))),
       );
     };
     place();
@@ -209,7 +225,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       window.removeEventListener("resize", place);
       release();
     };
-  }, [projects, stopOf]);
+  }, [sources, stopOf]);
 
   // Opening a project: the page stays where it is, held behind.
   const openedOnce = useRef(false);
@@ -217,17 +233,24 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     const carousel = carouselRef.current;
     const root = document.documentElement;
     if (openIndex >= 0) {
+      const card = openIndex + 1;
       // Reached by a link: bring the carousel to that project first.
-      const away = Math.abs(window.scrollY - stopOf(openIndex)) > 4;
+      const away = Math.abs(window.scrollY - stopOf(card)) > 4;
       const direct = !openedOnce.current && away;
-      if (away) scrollPageTo(stopOf(openIndex), true);
-      if (direct) carousel?.jumpTo(openIndex);
-      carousel?.setOpen(openIndex, direct);
+      if (away) scrollPageTo(stopOf(card), true);
+      if (direct) carousel?.jumpTo(card);
+      carousel?.setOpen(card, direct);
       openedOnce.current = true;
       holdPageScroll(true);
       root.dataset.detail = "open";
-      const project = projects[openIndex];
-      direction.project = projectWorld(project);
+      direction.project = projectWorld(projects[openIndex]);
+      // The matrix answers: a ring spreads from the middle of the cover.
+      if (stage && !direct) {
+        stage.pulse(
+          stage.width * (stage.width < 832 ? 0.5 : 0.595),
+          window.innerHeight * 0.5,
+        );
+      }
     } else {
       carousel?.setOpen(null);
       direction.project = null;
@@ -246,25 +269,18 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     [],
   );
 
-  if (projects.length === 0) {
-    return (
-      <section id="projets" className="work work-empty" aria-label="Projets">
-        <p>Les projets arrivent bientôt.</p>
-      </section>
-    );
-  }
+  if (projects.length === 0) return null;
 
-  const project = projects[Math.min(active, projects.length - 1)];
+  const active = focus - 1;
+  const project = active >= 0 ? projects[active] : null;
 
   return (
     <>
-      <section
-        ref={sectionRef}
-        id="projets"
+      <div
+        ref={trackRef}
         className="work"
-        aria-labelledby="work-heading"
-        data-nav-stops={projects
-          .map((_, index) => (index * STEP).toFixed(2))
+        data-nav-stops={sources
+          .map((_, card) => (card * STEP).toFixed(2))
           .join(" ")}
         style={
           {
@@ -273,72 +289,56 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
           } as CSSProperties
         }
       >
-        <div ref={stickyRef} className="work-sticky">
-          <header className="work-head">
-            <h2 id="work-heading">Projets</h2>
-            <p aria-hidden="true">
-              <span className="work-current" key={active}>
-                {pad(active + 1)}
-              </span>
-              <span className="work-total"> / {pad(projects.length)}</span>
-            </p>
-          </header>
+        {/* Where "Projets" leads: the first project in focus. */}
+        <div id="projets" className="work-anchor" data-nav-stops="0" />
 
-          <div
-            className="work-info"
-            key={project.slug}
-            aria-live="polite"
-            data-calm
-          >
-            <p className="work-kicker">
-              {project.category}
-              <span aria-hidden="true"> — </span>
-              {projectPeriod(project)}
-            </p>
-            <h3 className="work-title">{project.title}</h3>
-            <p className="work-summary">{project.summary}</p>
+        <div
+          ref={stickyRef}
+          className="work-sticky"
+          data-shown={focus > 0 || undefined}
+        >
+          <nav className="work-list" aria-label="Projets" data-calm>
+            <h2>Projets</h2>
+            <ol>
+              {projects.map((item, index) => (
+                <li key={item.slug}>
+                  <button
+                    type="button"
+                    aria-current={index === active ? "true" : undefined}
+                    tabIndex={focus > 0 ? 0 : -1}
+                    onClick={() => choose(index)}
+                  >
+                    <span className="work-number" aria-hidden="true">
+                      {pad(index + 1)}
+                    </span>
+                    {item.title}
+                  </button>
+                </li>
+              ))}
+            </ol>
+            {catalog.source === "demo" && (
+              <p className="work-notice">Exemples fictifs</p>
+            )}
+          </nav>
+
+          {/* Over the cover the stage draws: it takes the click, and shows
+              the picture itself where the stage cannot. */}
+          {project && (
             <button
               type="button"
-              className="button button-solid work-open"
+              className="work-cover"
+              aria-label={`Ouvrir le projet ${project.title}`}
               onClick={() => open(active)}
             >
-              Voir le projet
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={coverOf(project)} alt="" loading="lazy" />
+              <span className="work-cover-hint glass" aria-hidden="true">
+                Ouvrir
+              </span>
             </button>
-          </div>
-
-          {/* Over the cover the stage draws: it takes the click and the
-              focus, and shows the picture itself where the stage cannot. */}
-          <button
-            type="button"
-            className="work-cover"
-            aria-label={`Ouvrir le projet ${project.title}`}
-            onClick={() => open(active)}
-            tabIndex={-1}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={coverOf(project)} alt="" loading="lazy" />
-          </button>
-
-          <ol className="work-pager" aria-label="Tous les projets">
-            {projects.map((item, index) => (
-              <li key={item.slug}>
-                <button
-                  type="button"
-                  aria-label={item.title}
-                  aria-current={index === active ? "true" : undefined}
-                  onClick={() => scrollPageTo(stopOf(index))}
-                >
-                  <span aria-hidden="true">{item.title}</span>
-                </button>
-              </li>
-            ))}
-          </ol>
-
-          {catalog.source === "demo" && (
-            <p className="work-notice">Exemples fictifs</p>
           )}
         </div>
-      </section>
+      </div>
 
       {shown && (
         <ProjectDetail

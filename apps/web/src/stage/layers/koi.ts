@@ -59,10 +59,10 @@ export class KoiPond implements Layer {
   private readonly length: number;
 
   constructor(frame: WorldFrame, options: KoiOptions = {}) {
-    this.length = options.length ?? 190;
+    this.length = options.length ?? 270;
     const count =
       options.count ??
-      Math.round(clamp((frame.width * frame.height) / 190000, 3, 8));
+      Math.round(clamp((frame.width * frame.height) / 110000, 5, 13));
     for (let index = 0; index < count; index += 1) {
       const depth = 0.55 + 0.45 * Math.pow(index / Math.max(1, count - 1), 1.2);
       const heading = randomBetween(0, TAU);

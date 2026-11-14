@@ -2,52 +2,55 @@ import type { CardDraw } from "./cards-layer";
 import type { StageEngine } from "./engine";
 import { clamp, clamp01, damp, easeInOutCubic, lerp, smoothstep } from "./math";
 
-// The projects carousel: a column of covers wrapped over a wide drum, slightly
-// askew, turned by the page's scroll. The cover in the middle is sharp; those
-// above and below bend away, fade into the paper and break up into matrix
-// cells. Opening a project flattens its cover and carries it to the place the
-// project's page keeps for it.
+// The story's carousel: the hero, then every project, on a roller standing
+// upright. The page's scroll turns it. The card in the middle faces the
+// reader, flat; those above and below have turned away around the roller,
+// wrapped on its curve.
+//
+// The first card is the hero itself. At the top of the page it fills the
+// screen; scrolling, it draws back, shrinks to a card's size and turns away
+// on the roller as the first project comes round. Opening a project does the
+// reverse for that project's cover: it comes forward, flattens, and settles
+// in the frame its page keeps for it.
 
 export type CarouselLayout = {
-  /** Centre of the cover in focus. */
+  /** Centre of the card in focus. */
   x: number;
   y: number;
   width: number;
   height: number;
   /**
-   * Which way the covers travel: down a column on wide screens, along a row
-   * on narrow ones, where the column would run through the text.
+   * Which way the cards travel: on a roller down the screen on wide ones,
+   * along a row on narrow ones, where the roller would run through the text.
    */
   sideways: boolean;
 };
 
 export type Rect = { left: number; top: number; width: number; height: number };
 
-/** Distance between two covers, in cover heights. */
-const GAP = 1.13;
-/** How far the column leans: horizontal shift per pixel of vertical travel. */
-const SLANT = -0.13;
-const ROLL = -0.035;
+/** How far round the roller two neighbours are, in radians. */
+const TURN = 0.7;
+/** Distance between two neighbours down the screen, in card heights. */
+const DROP = 0.9;
 /** Seconds a cover takes to open into its project, and to come back. */
 const OPEN_SECONDS = 0.95;
 const CLOSE_SECONDS = 0.75;
+/** Share of the first step during which the hero shrinks into its card. */
+const HERO_ZOOM = 0.86;
 
 export class Carousel {
-  /** Position in the list: 2.4 is between the third and fourth covers. */
+  /** Position in the list: 0 is the hero, 2.4 is between two projects. */
   position = 0;
   private velocity = 0;
-  /** 0: in the carousel; 1: the open project's cover. */
+  /** 0: on the roller; 1: the open project's cover. */
   private open = 0;
   private opening = false;
-  private openIndex = 0;
+  private openIndex = 1;
 
+  /** `sources[0]` stands for the hero and is not loaded. */
   constructor(private sources: string[]) {}
 
-  setSources(sources: string[]) {
-    this.sources = sources;
-  }
-
-  /** Starts opening the cover at `index`, or closing the open one. */
+  /** Starts opening the card at `index`, or closing the open one. */
   setOpen(index: number | null, instant = false) {
     this.opening = index !== null;
     if (index !== null) this.openIndex = index;
@@ -60,29 +63,26 @@ export class Carousel {
     this.velocity = 0;
   }
 
-  get isOpen() {
-    return this.open >= 1;
+  /** How far the open project's cover has come forward, 0 to 1. */
+  get opened() {
+    return this.open;
   }
 
-  get isClosed() {
-    return this.open <= 0;
-  }
-
-  /** Where the cover in focus sits, for a given viewport. */
+  /** Where the card in focus sits, for a given viewport. */
   static layout(width: number, height: number): CarouselLayout {
     const narrow = width < 832;
     let cardHeight = narrow
-      ? Math.min(height * 0.34, (width * 0.88 * 9) / 16)
-      : clamp(height * 0.52, 230, 600);
+      ? Math.min(height * 0.36, (width * 0.9 * 9) / 16)
+      : clamp(height * 0.64, 260, 760);
     let cardWidth = (cardHeight * 16) / 9;
-    const widest = narrow ? width * 0.88 : width * 0.54;
+    const widest = narrow ? width * 0.9 : width * 0.6;
     if (cardWidth > widest) {
       cardWidth = widest;
       cardHeight = (cardWidth * 9) / 16;
     }
     return {
-      x: narrow ? width / 2 : width * 0.645,
-      y: narrow ? height * 0.34 : height * 0.5,
+      x: narrow ? width / 2 : width * 0.595,
+      y: narrow ? height * 0.36 : height * 0.5,
       width: cardWidth,
       height: cardHeight,
       sideways: narrow,
@@ -91,16 +91,14 @@ export class Carousel {
 
   /**
    * Advances towards `target` (the position the scroll asks for) and pushes
-   * this frame's covers. `shift` moves the whole column vertically, while
-   * the section slides in or out of the screen. `cover` is where the open
-   * project wants its cover, and `fade` dims the whole carousel as its section
-   * leaves the screen. Returns whether anything is still moving.
+   * this frame's cards. `cover` is where the open project wants its cover,
+   * `fade` dims everything as the story leaves the screen. Returns whether
+   * anything is still moving.
    */
   update(
     stage: StageEngine,
     dt: number,
     target: number,
-    shift: number,
     visible: boolean,
     cover: Rect | null,
     viewHeight: number,
@@ -129,17 +127,18 @@ export class Carousel {
       this.position !== target ||
       Math.abs(this.velocity) > 0.002 ||
       this.open !== goal;
-    if (!visible && this.open === 0) return moving;
+    // At the very top the hero fills the screen: the stage draws it itself.
+    if (!visible || (this.position <= 0 && this.open === 0)) return moving;
 
     const layout = Carousel.layout(width, height);
     const { sideways } = layout;
-    const gap = sideways ? layout.width * 1.07 : layout.height * GAP;
-    const rush = Math.min(1, Math.abs(this.velocity) * 0.22);
-    const curve =
-      (1 / ((sideways ? width : height) * 1.02)) * (1 + rush * 0.35);
-    const pivot = layout.y + shift;
+    const radius = layout.width * 0.74;
+    const drop = layout.height * DROP;
+    const stride = layout.width * 1.06;
+    const rush = Math.min(1, Math.abs(this.velocity) * 0.2);
+    const hero = stage.hero.surface;
 
-    // From the farthest to the nearest, so the cover in focus is drawn last.
+    // From the farthest to the nearest, so the card in focus is drawn last.
     const order = this.sources
       .map((_, index) => index)
       .sort(
@@ -149,29 +148,53 @@ export class Carousel {
     for (const index of order) {
       const offset = index - this.position;
       const distance = Math.abs(offset);
-      if (distance > 2.6 && !(index === this.openIndex && opened > 0)) continue;
+      if (distance > 2.3 && !(index === this.openIndex && opened > 0)) continue;
+      if (index === 0 && !hero) continue;
 
+      // Its place on the roller.
+      const turn = offset * TURN * (1 + rush * 0.12);
       const card: CardDraw = {
-        src: this.sources[index],
-        x: sideways ? layout.x + offset * gap : layout.x + offset * gap * SLANT,
-        y: sideways
-          ? layout.y + shift + offset * gap * SLANT * 0.4
-          : layout.y + shift + offset * gap,
+        ...(index === 0
+          ? { surface: hero ?? undefined }
+          : { src: this.sources[index] }),
+        x: layout.x + (sideways ? offset * stride : 0),
+        y: layout.y + (sideways ? 0 : offset * drop),
         width: layout.width,
         height: layout.height,
-        curveY: sideways ? 0 : curve,
-        pivotY: pivot,
-        curveX: sideways ? curve : 0,
-        pivotX: layout.x,
-        roll: sideways ? ROLL * 0.5 : ROLL,
-        alpha: fade * (1 - smoothstep(1.45, 2.3, distance)),
-        pixel: clamp01(
-          smoothstep(0.1, 0.95, distance) + rush * 0.5 + (1 - fade) * 0.8,
-        ),
-        dim: 0.36 * smoothstep(0.15, 1.3, distance),
-        shadow: 1 - smoothstep(0, 0.7, distance),
-        radius: 12,
+        alpha: fade * (1 - smoothstep(1.55, 2.15, distance)),
+        shadow: 1 - smoothstep(0, 0.8, distance),
+        radius: 0,
       };
+      if (sideways) {
+        card.curveX = 1 / (width * 1.02);
+        card.pivotX = layout.x;
+      } else {
+        card.ring = {
+          centerX: layout.x,
+          radius,
+          angle: turn,
+          wrap: smoothstep(0.05, 1, distance),
+        };
+      }
+
+      // The hero: from the whole screen to its card.
+      if (index === 0 && this.position < 1) {
+        const zoom = easeInOutCubic(clamp01(this.position / HERO_ZOOM));
+        card.x = lerp(width / 2, card.x, zoom);
+        card.y = lerp(height / 2, card.y, zoom);
+        card.width = lerp(width, card.width, zoom);
+        card.height = lerp(height, card.height, zoom);
+        card.shadow = (card.shadow ?? 0) * zoom + zoom * (1 - zoom) * 2;
+        if (card.ring) {
+          card.ring.centerX = lerp(width / 2, layout.x, zoom);
+          card.ring.angle *= zoom;
+          card.ring.wrap *= zoom;
+          // A larger roller while the card is still wide: it must not wrap.
+          card.ring.radius = lerp(width * 2, radius, zoom);
+        } else {
+          card.curveX = (card.curveX ?? 0) * zoom;
+        }
+      }
 
       if (opened > 0) {
         if (index === this.openIndex && cover) {
@@ -179,26 +202,31 @@ export class Carousel {
           card.y = lerp(card.y, cover.top + cover.height / 2, opened);
           card.width = lerp(card.width, cover.width, opened);
           card.height = lerp(card.height, cover.height, opened);
-          card.curveY = (card.curveY ?? 0) * (1 - opened);
           card.curveX = (card.curveX ?? 0) * (1 - opened);
-          card.roll = (card.roll ?? 0) * (1 - opened);
-          card.pixel = (card.pixel ?? 0) * (1 - opened);
-          card.dim = (card.dim ?? 0) * (1 - opened);
+          if (card.ring) {
+            card.ring.centerX = lerp(
+              card.ring.centerX,
+              cover.left + cover.width / 2,
+              opened,
+            );
+            card.ring.angle *= 1 - opened;
+            card.ring.wrap *= 1 - opened;
+          }
           card.shadow = lerp(card.shadow ?? 0, 0.55, opened);
-          card.radius = lerp(12, 14, opened);
           card.alpha = Math.max(card.alpha ?? 0, opened);
         } else {
-          // The others step aside.
-          card.alpha = (card.alpha ?? 1) * (1 - smoothstep(0, 0.55, opened));
+          // The others turn further away and go.
+          card.alpha = (card.alpha ?? 1) * (1 - smoothstep(0, 0.5, opened));
           const aside = Math.sign(offset || 1) * opened;
-          if (sideways) card.x += aside * width * 0.3;
-          else card.y += aside * height * 0.3;
+          if (card.ring) card.ring.angle += aside * 0.5;
+          else card.x += aside * width * 0.3;
         }
       }
 
       // Off screen: nothing to draw.
-      const reach = card.height * 0.5 + 80;
+      const reach = card.height * 0.5 + 90;
       if (card.y < -reach || card.y > height + reach) continue;
+      if ((card.alpha ?? 0) <= 0.003) continue;
       stage.cards.push(card);
     }
 

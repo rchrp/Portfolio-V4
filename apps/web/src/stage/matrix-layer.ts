@@ -46,6 +46,8 @@ uniform vec3 uHaloColor;
 // Boxes of text (left, top, right, bottom): figures fade behind them.
 uniform vec4 uCalm[CALM_ZONES];
 uniform int uCalmCount;
+// A ring travelling through the resting dots: xy centre, z radius, w strength.
+uniform vec4 uPulse;
 
 out vec4 fragColor;
 
@@ -103,8 +105,13 @@ void main() {
   float lit = glow * mix(1.0, 0.3, calm);
   restSize += lit * 0.3 + halo * 0.13;
   restAlpha = min(1.0, restAlpha + lit * 0.5 + halo * 0.2);
+  // A pulse passing: the dots swell in a ring, then settle.
+  float ringOffset = (distance(center, uPulse.xy) - uPulse.z) / (64.0 * uPixelRatio);
+  float ring = exp(-ringOffset * ringOffset) * uPulse.w * mix(1.0, 0.35, calm);
+  restSize += ring * 0.34;
+  restAlpha = min(1.0, restAlpha + ring * 0.45);
   vec3 restColor = mix(uRest, uHaloColor, min(1.0, halo * 0.9));
-  restColor = mix(restColor, uLightColor, min(1.0, lit * 1.15));
+  restColor = mix(restColor, uLightColor, min(1.0, lit * 1.15 + ring * 0.7));
 
   // A figure grows out of the resting dot, taking its colour as it does.
   float size = mix(restSize, 0.88, level);
@@ -142,6 +149,7 @@ const uniformNames = [
   "uHaloColor",
   "uCalm",
   "uCalmCount",
+  "uPulse",
 ] as const;
 
 export type MatrixLight = {
@@ -221,6 +229,7 @@ export class MatrixLayer {
     pixelRatio: number,
     calm: Float32Array,
     calmCount: number,
+    pulse: MatrixLight,
   ) {
     const { gl } = this;
     const { uniforms } = this.program;
@@ -290,6 +299,13 @@ export class MatrixLayer {
       mood.halo[0] / 255,
       mood.halo[1] / 255,
       mood.halo[2] / 255,
+    );
+    gl.uniform4f(
+      uniforms.uPulse,
+      pulse.x * pixelRatio,
+      pulse.y * pixelRatio,
+      pulse.radius * pixelRatio,
+      pulse.strength,
     );
     gl.uniform4fv(uniforms.uCalm, calm);
     gl.uniform1i(uniforms.uCalmCount, calmCount);

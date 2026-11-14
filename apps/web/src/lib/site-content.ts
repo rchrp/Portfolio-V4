@@ -4,18 +4,9 @@
 export const hero = {
   firstName: "Raphaël",
   lastName: "Charpentier",
-  role: "Software engineer · Freelance",
-  lead: "Disponible pour des missions freelance : produits web, interfaces sur mesure et expériences interactives.",
-};
-
-export const manifesto = {
-  // Words wrapped in *asterisks* are highlighted with the accent color.
-  text: "Le web est rempli de sites qu’on oublie sitôt l’onglet fermé. J’essaie de construire *les autres.*",
-  disciplines: [
-    { label: "Interfaces", detail: "React, Next.js, animation & WebGL" },
-    { label: "Systèmes", detail: "Node.js, API, PostgreSQL" },
-    { label: "Produit", detail: "Conception, itération, mise en ligne" },
-  ],
+  // Who, in one breath: status, studies, what I build.
+  description:
+    "Software engineer freelance et étudiant en 4ᵉ année à Epitech Lyon, cette année en Master 1 d’intelligence artificielle à l’Université Politehnica de Bucarest. Je conçois des produits web de bout en bout, de l’interface à l’API.",
 };
 
 // Public contact details, shown in the contact section. Each one is

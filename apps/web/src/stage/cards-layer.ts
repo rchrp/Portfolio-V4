@@ -1,24 +1,49 @@
 import type { StageEngine, StageLayer } from "./engine";
 import { createProgram, type GL, type Program } from "./gl";
 
-// Pictures in the stage: project covers and screenshots, drawn as planes in
-// the same canvas as the matrix. A plane can bend around an axis (so a column
-// of cards wraps over a drum and a strip of screenshots around a cylinder),
-// and can dissolve into the matrix's own squares: seen from afar, a picture
-// is a mosaic of cells that sharpens into the photograph as it comes into
-// focus.
+// Pictures in the stage: project covers, screenshots and the hero's own card,
+// drawn as planes in the same canvas as the matrix. A plane can be placed on
+// a roller (a cylinder standing upright: it turns away and recedes as it
+// leaves the middle, and wraps around the roller's curve), or bent around an
+// axis as a strip of screenshots is.
+//
+// A picture arrives out of the matrix: while it loads in, it is a mosaic of
+// cells that sharpens into the image.
 //
 // The layer keeps no scene of its own. Every frame, whoever wants a picture
 // on screen pushes a `CardDraw`; the list is drawn, then forgotten.
 
+/** A picture someone else drew: a framebuffer's texture. */
+export type CardSurface = {
+  texture: WebGLTexture;
+  width: number;
+  height: number;
+};
+
+/** A place on a roller standing upright behind the cards. */
+export type CardRing = {
+  /** Where the roller's nearest line meets the screen. */
+  centerX: number;
+  /** Radius, in pixels. */
+  radius: number;
+  /** How far round the card has turned, in radians: 0 faces the viewer. */
+  angle: number;
+  /** 0: a flat card tangent to the roller; 1: wrapped around it. */
+  wrap: number;
+};
+
 export type CardDraw = {
   /** Picture to show; nothing is drawn until it has loaded. */
-  src: string;
+  src?: string;
+  /** Or a picture drawn elsewhere in the stage. */
+  surface?: CardSurface;
   /** Centre and size in viewport pixels, before any bending. */
   x: number;
   y: number;
   width: number;
   height: number;
+  /** Placement on a roller; `x` is then ignored. */
+  ring?: CardRing;
   /** Bend around a horizontal axis at `pivotY`: 1 / radius, in 1 / pixels. */
   curveY?: number;
   pivotY?: number;
@@ -29,8 +54,6 @@ export type CardDraw = {
   roll?: number;
   /** 0 to 1. */
   alpha?: number;
-  /** 0: the photograph; 1: a mosaic of matrix cells. */
-  pixel?: number;
   /** Corner radius, in pixels. */
   radius?: number;
   /** How far the picture fades into the paper, 0 to 1. */
@@ -48,7 +71,7 @@ type Texture = {
   ready: boolean;
   /** Stage time of the last frame it was drawn. */
   usedAt: number;
-  /** Eased 0 to 1 once loaded: pictures fade in instead of popping. */
+  /** Eased 0 to 1 once loaded: pictures resolve out of the matrix. */
   shown: number;
 };
 
@@ -60,22 +83,42 @@ uniform vec2 uViewport;
 uniform vec4 uRect;
 // Curvature and pivot around the horizontal axis, then the vertical one.
 uniform vec4 uCurve;
+// Roller: centre x, radius, angle, wrap. A radius of 0 means no roller.
+uniform vec4 uRing;
 uniform float uRoll;
 uniform float uFocal;
 // Outward margin, in pixels: the shadow is drawn on a larger plane.
 uniform float uMargin;
 
 out vec2 vLocal;
-out float vDepth;
+out float vFacing;
 
 void main() {
   vec2 local = aPosition * (uRect.zw + uMargin * 2.0);
   vLocal = local;
   float c = cos(uRoll);
   float s = sin(uRoll);
-  vec2 point = uRect.xy + vec2(local.x * c - local.y * s, local.x * s + local.y * c);
+  vec2 turned = vec2(local.x * c - local.y * s, local.x * s + local.y * c);
+  vec2 point = uRect.xy + turned;
   float depth = 0.0;
+  vFacing = 1.0;
 
+  if (uRing.y > 0.0) {
+    float radius = uRing.y;
+    float angle = uRing.z;
+    // Flat: the card touches the roller along its middle line.
+    vec2 level = vec2(
+      radius * sin(angle) + turned.x * cos(angle),
+      radius * (1.0 - cos(angle)) + turned.x * sin(angle)
+    );
+    // Wrapped: every column of the card lies on the roller.
+    float around = clamp(angle + turned.x / radius, -1.5, 1.5);
+    vec2 wrapped = vec2(radius * sin(around), radius * (1.0 - cos(around)));
+    vec2 placed = mix(level, wrapped, uRing.w);
+    point.x = uRing.x + placed.x;
+    depth += placed.y;
+    vFacing = cos(mix(angle, around, uRing.w));
+  }
   if (abs(uCurve.x) > 0.000001) {
     float angle = clamp((point.y - uCurve.y) * uCurve.x, -1.45, 1.45);
     point.y = uCurve.y + sin(angle) / uCurve.x;
@@ -87,11 +130,10 @@ void main() {
     depth += (1.0 - cos(angle)) / uCurve.z;
   }
 
-  // What bends away shrinks towards the centre of the screen.
+  // What turns away shrinks towards the middle of the screen.
   float scale = uFocal / (uFocal + depth);
-  vec2 center = uViewport * 0.5;
-  point = center + (point - center) * scale;
-  vDepth = depth / uFocal;
+  vec2 vanishing = vec2(uRing.y > 0.0 ? uRing.x : uViewport.x * 0.5, uViewport.y * 0.5);
+  point = vanishing + (point - vanishing) * scale;
 
   gl_Position = vec4(
     point.x / uViewport.x * 2.0 - 1.0,
@@ -105,7 +147,7 @@ const fragment = /* glsl */ `#version 300 es
 precision highp float;
 
 in vec2 vLocal;
-in float vDepth;
+in float vFacing;
 
 uniform sampler2D uImage;
 uniform vec2 uImageSize;
@@ -116,6 +158,7 @@ uniform float uPixel;
 uniform float uCell;
 uniform float uDim;
 uniform float uAnchor;
+uniform float uFlip;
 uniform vec3 uPaper;
 uniform vec3 uInk;
 // 0: the picture; 1: its shadow.
@@ -134,8 +177,9 @@ void main() {
 
   if (uShadow > 0.0) {
     // A soft pool below the card, tighter right under its edge.
-    float soft = 1.0 - smoothstep(-8.0, 46.0, edge);
-    fragColor = vec4(uInk * soft * soft * uShadow * uAlpha * 0.2, soft * soft * uShadow * uAlpha * 0.2);
+    float soft = 1.0 - smoothstep(-8.0, 54.0, edge);
+    float strength = soft * soft * uShadow * uAlpha * 0.22;
+    fragColor = vec4(uInk * strength, strength);
     return;
   }
 
@@ -152,7 +196,7 @@ void main() {
     : vec2(cardAspect / imageAspect, 1.0);
   vec2 offset = vec2(0.5, uAnchor);
 
-  // The mosaic: the card is cut into cells the size of the matrix's own.
+  // While it loads in: the card is cut into cells the size of the matrix's.
   vec2 cells = max(vec2(1.0), floor(uRect.zw / uCell));
   vec2 grid = uv * cells;
   vec2 cellUv = (floor(grid) + 0.5) / cells;
@@ -161,21 +205,23 @@ void main() {
 
   vec2 sampleUv = mix(uv, cellUv, mosaic);
   vec2 imageUv = (sampleUv - offset) * fit + offset;
+  imageUv.y = mix(imageUv.y, 1.0 - imageUv.y, uFlip);
   // Averaged over the whole cell, not picked from its centre.
   float texelsPerPixel = uImageSize.x * fit.x / uRect.z;
   float lod = mosaic * log2(max(1.0, uCell * texelsPerPixel));
-  vec3 color = textureLod(uImage, imageUv, lod).rgb;
+  vec3 color = mosaic > 0.0
+    ? textureLod(uImage, imageUv, lod).rgb
+    : texture(uImage, imageUv).rgb;
 
-  // As in the portrait: darker cells are larger.
   float grey = dot(color, vec3(0.2126, 0.7152, 0.0722));
   float side = mix(0.5, 0.5 * (0.92 - 0.34 * smoothstep(0.3, 0.98, grey)), uPixel);
   float cellPixel = uCell / max(pixelSize, 0.0001);
   float gap = clamp(0.5 + (side - max(inCell.x, inCell.y)) * cellPixel, 0.0, 1.0);
   mask *= mix(1.0, gap, smoothstep(0.02, 0.2, uPixel));
 
-  // What bends away sinks into the paper.
-  float far = clamp(uDim + vDepth * 2.3, 0.0, 1.0);
-  color = mix(color, uPaper, far);
+  // Turned away from the viewer, a card catches less light.
+  color *= mix(0.62, 1.0, smoothstep(0.1, 1.0, vFacing));
+  color = mix(color, uPaper, uDim);
 
   float alpha = mask * uAlpha;
   fragColor = vec4(color * alpha, alpha);
@@ -185,6 +231,7 @@ const uniformNames = [
   "uViewport",
   "uRect",
   "uCurve",
+  "uRing",
   "uRoll",
   "uFocal",
   "uMargin",
@@ -196,18 +243,21 @@ const uniformNames = [
   "uCell",
   "uDim",
   "uAnchor",
+  "uFlip",
   "uPaper",
   "uInk",
   "uShadow",
 ] as const;
 
 /** Planes are subdivided so they can bend. */
-const SEGMENTS = 24;
+const SEGMENTS = 28;
 /** Larger pictures are scaled down before reaching the GPU. */
 const MAX_TEXTURE = 2048;
 /** Seconds an unused picture stays in memory. */
 const KEEP_SECONDS = 40;
-const SHADOW_MARGIN = 56;
+/** Seconds a picture takes to resolve out of the matrix. */
+const RESOLVE_SECONDS = 0.7;
+const SHADOW_MARGIN = 64;
 
 export class CardsLayer implements StageLayer {
   private readonly gl: GL;
@@ -404,7 +454,7 @@ export class CardsLayer implements StageLayer {
     const { gl } = this;
     const { uniforms } = this.program;
     const { mood } = stage;
-    let fading = false;
+    let resolving = false;
 
     gl.useProgram(this.program.program);
     gl.enable(gl.BLEND);
@@ -429,18 +479,39 @@ export class CardsLayer implements StageLayer {
     );
 
     for (const card of draws) {
-      const entry = this.textureFor(card.src);
-      entry.usedAt = stage.time;
-      if (!entry.ready) continue;
-      if (entry.shown < 1) {
-        entry.shown = stage.still ? 1 : Math.min(1, entry.shown + dt / 0.45);
-        fading = true;
-      }
-      const alpha = (card.alpha ?? 1) * entry.shown;
-      if (alpha <= 0.003 || card.width < 1 || card.height < 1) continue;
+      let texture: WebGLTexture | null;
+      let imageWidth: number;
+      let imageHeight: number;
+      let shown = 1;
 
-      gl.bindTexture(gl.TEXTURE_2D, entry.texture);
-      gl.uniform2f(uniforms.uImageSize, entry.width, entry.height);
+      if (card.surface) {
+        texture = card.surface.texture;
+        imageWidth = card.surface.width;
+        imageHeight = card.surface.height;
+      } else if (card.src) {
+        const entry = this.textureFor(card.src);
+        entry.usedAt = stage.time;
+        if (!entry.ready) continue;
+        if (entry.shown < 1) {
+          entry.shown = stage.still
+            ? 1
+            : Math.min(1, entry.shown + dt / RESOLVE_SECONDS);
+          resolving = true;
+        }
+        texture = entry.texture;
+        imageWidth = entry.width;
+        imageHeight = entry.height;
+        shown = entry.shown;
+      } else {
+        continue;
+      }
+
+      const alpha = (card.alpha ?? 1) * Math.min(1, shown * 2.5);
+      if (alpha <= 0.003 || card.width < 1 || card.height < 1) continue;
+      const ring = card.ring;
+
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.uniform2f(uniforms.uImageSize, imageWidth, imageHeight);
       gl.uniform4f(uniforms.uRect, card.x, card.y, card.width, card.height);
       gl.uniform4f(
         uniforms.uCurve,
@@ -449,12 +520,20 @@ export class CardsLayer implements StageLayer {
         card.curveX ?? 0,
         card.pivotX ?? stage.width / 2,
       );
+      gl.uniform4f(
+        uniforms.uRing,
+        ring?.centerX ?? 0,
+        ring?.radius ?? 0,
+        ring?.angle ?? 0,
+        ring?.wrap ?? 0,
+      );
       gl.uniform1f(uniforms.uRoll, card.roll ?? 0);
-      gl.uniform1f(uniforms.uRadius, card.radius ?? 10);
+      gl.uniform1f(uniforms.uRadius, card.radius ?? 0);
       gl.uniform1f(uniforms.uAlpha, alpha);
-      gl.uniform1f(uniforms.uPixel, card.pixel ?? 0);
+      gl.uniform1f(uniforms.uPixel, 1 - shown);
       gl.uniform1f(uniforms.uDim, card.dim ?? 0);
       gl.uniform1f(uniforms.uAnchor, card.anchor ?? 0.5);
+      gl.uniform1f(uniforms.uFlip, card.surface ? 1 : 0);
 
       const shadow = card.shadow ?? 0;
       if (shadow > 0.01) {
@@ -463,7 +542,7 @@ export class CardsLayer implements StageLayer {
         gl.uniform4f(
           uniforms.uRect,
           card.x,
-          card.y + card.height * 0.035,
+          card.y + card.height * 0.04,
           card.width,
           card.height,
         );
@@ -478,7 +557,7 @@ export class CardsLayer implements StageLayer {
     gl.bindVertexArray(null);
     gl.activeTexture(gl.TEXTURE0);
     gl.disable(gl.BLEND);
-    return fading;
+    return resolving;
   }
 
   dispose() {

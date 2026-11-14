@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { hero } from "@/lib/site-content";
 import { StageEngine } from "@/stage/engine";
 
 // The engine lives outside React: it is created after mount, in the browser
@@ -48,8 +49,14 @@ export function Stage() {
 
     let stage: StageEngine;
     try {
-      stage = new StageEngine(canvas);
-    } catch {
+      stage = new StageEngine(canvas, hero.firstName);
+    } catch (error) {
+      // No WebGL2, or a shader the driver refuses: the page falls back to
+      // its plain version. Said once, for whoever is debugging.
+      console.warn(
+        "[stage] unavailable:",
+        error instanceof Error ? error.message : error,
+      );
       canvas.remove();
       root.dataset.stage = "off";
       return () => {

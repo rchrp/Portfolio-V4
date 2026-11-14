@@ -104,7 +104,7 @@ export function ProjectDetail({
       tabIndex={-1}
     >
       <div className="detail-bar">
-        <button type="button" className="detail-back" onClick={onClose}>
+        <button type="button" className="detail-back glass" onClick={onClose}>
           <ArrowLeft size={17} aria-hidden="true" />
           Projets
         </button>
@@ -181,7 +181,7 @@ export function ProjectDetail({
               {project.links.map((link) => (
                 <a
                   key={link.url}
-                  className="button button-outline"
+                  className="button glass"
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -196,7 +196,11 @@ export function ProjectDetail({
         </section>
 
         <footer className="detail-end">
-          <button type="button" className="detail-return" onClick={onClose}>
+          <button
+            type="button"
+            className="detail-return glass"
+            onClick={onClose}
+          >
             <ArrowLeft size={17} aria-hidden="true" />
             Tous les projets
           </button>

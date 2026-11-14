@@ -1,20 +1,21 @@
 import type { CellGrid } from "./cells";
 import { createProgram, type GL, type Program } from "./gl";
 import type { MatrixLight } from "./matrix-layer";
-import { clamp, clamp01, damp, hash2, smoothstep } from "./math";
+import { clamp, clamp01, hash2, smoothstep } from "./math";
 import type { Mood } from "./moods";
 import type { WorldPointer } from "./world";
 
-// The portrait, made of the matrix's own cells. The photograph is sampled
-// once per cell of the grid: each sample becomes a square that sits exactly
-// on its cell, sized by how dark the photograph is there and coloured like
-// it. At rest it is indistinguishable from the grid showing a picture.
+// The portrait: a photograph, and the matrix it is made of.
 //
-// Unlike the grid's cells, these squares can leave their place. The pointer
-// sweeps them along as it passes (the push follows its motion, as a hand
-// through sand would), they glide, then a spring brings each one home. The
-// same squares condense out of the resting dots when the portrait appears
-// and melt back into them when it goes.
+// At rest it is the photograph itself, sharp. But the photograph is also
+// sampled once per cell of the grid, and each sample is a square that can
+// take over from the patch of picture it stands for. Under the pointer the
+// picture gives way to its squares, which are swept along the pointer's
+// path, glide, and are brought home by a spring; as each one settles, the
+// photograph closes over it again.
+//
+// The same squares tell how the portrait arrives: they condense out of the
+// resting dots, then sharpen into the photograph, from the face outwards.
 
 export type PortraitRect = {
   x: number;
@@ -23,10 +24,67 @@ export type PortraitRect = {
   height: number;
 };
 
-const vertex = /* glsl */ `#version 300 es
+const photoVertex = /* glsl */ `#version 300 es
 in vec2 aCorner;
-// x, y, size (CSS pixels) and presence (0: a resting dot, 1: the photograph).
+uniform vec2 uViewport;
+// Left, top, width, height.
+uniform vec4 uRect;
+out vec2 vUv;
+
+void main() {
+  vUv = aCorner + 0.5;
+  vec2 position = uRect.xy + vUv * uRect.zw;
+  gl_Position = vec4(
+    position.x / uViewport.x * 2.0 - 1.0,
+    1.0 - position.y / uViewport.y * 2.0,
+    0.0,
+    1.0
+  );
+}`;
+
+const photoFragment = /* glsl */ `#version 300 es
+precision highp float;
+
+in vec2 vUv;
+uniform sampler2D uPhoto;
+// One texel per cell: how far the squares have taken over there.
+uniform sampler2D uMask;
+uniform vec2 uResolution;
+// Centre of the mask's first cell, and the cells' spacing.
+uniform vec2 uOrigin;
+uniform float uSpacing;
+uniform vec4 uLight;
+out vec4 fragColor;
+
+void main() {
+  // Premultiplied by the upload.
+  vec4 photo = texture(uPhoto, vUv);
+  if (photo.a <= 0.003) discard;
+
+  vec2 pixel = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
+  ivec2 cell = ivec2(floor((pixel - uOrigin) / uSpacing + 0.5));
+  ivec2 size = textureSize(uMask, 0);
+  float taken = 0.0;
+  if (cell.x >= 0 && cell.y >= 0 && cell.x < size.x && cell.y < size.y) {
+    taken = texelFetch(uMask, cell, 0).r;
+  }
+  float shown = 1.0 - taken;
+  if (shown <= 0.003) discard;
+
+  // The pointer's light lifts the picture where it falls.
+  float reach = distance(pixel, uLight.xy) / uLight.z;
+  float glow = exp(-reach * reach * 2.0) * uLight.w;
+  vec3 color = photo.rgb * (1.0 + glow * 0.12);
+
+  fragColor = vec4(color, photo.a) * shown;
+}`;
+
+const squareVertex = /* glsl */ `#version 300 es
+in vec2 aCorner;
+// x, y, size (CSS pixels), then how far the square has left the resting
+// dots for the photograph's colour (0 to 1).
 in vec4 iState;
+in float iAlpha;
 in vec4 iColor;
 
 uniform vec2 uViewport;
@@ -42,11 +100,7 @@ void main() {
   vec2 position = iState.xy + aCorner * side;
   vLocal = aCorner * side * uPixelRatio;
   vHalf = iState.z * 0.5 * uPixelRatio;
-  float presence = iState.w;
-  vColor = vec4(
-    mix(uRest, iColor.rgb, smoothstep(0.1, 0.7, presence)),
-    smoothstep(0.0, 0.3, presence) * iColor.a
-  );
+  vColor = vec4(mix(uRest, iColor.rgb, smoothstep(0.1, 0.7, iState.w)), iAlpha);
   gl_Position = vec4(
     position.x / uViewport.x * 2.0 - 1.0,
     1.0 - position.y / uViewport.y * 2.0,
@@ -55,7 +109,7 @@ void main() {
   );
 }`;
 
-const fragment = /* glsl */ `#version 300 es
+const squareFragment = /* glsl */ `#version 300 es
 precision highp float;
 
 in vec2 vLocal;
@@ -75,7 +129,6 @@ void main() {
   float coverage = clamp(0.5 - distanceToEdge, 0.0, 1.0) * vColor.a;
   if (coverage <= 0.002) discard;
 
-  // The pointer's light lifts the photograph where it falls.
   vec2 pixel = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
   float reach = distance(pixel, uLight.xy) / uLight.z;
   float glow = exp(-reach * reach * 2.0) * uLight.w;
@@ -84,7 +137,18 @@ void main() {
   fragColor = vec4(color * coverage, coverage);
 }`;
 
-const uniformNames = [
+const photoUniforms = [
+  "uViewport",
+  "uRect",
+  "uPhoto",
+  "uMask",
+  "uResolution",
+  "uOrigin",
+  "uSpacing",
+  "uLight",
+] as const;
+
+const squareUniforms = [
   "uViewport",
   "uPixelRatio",
   "uRest",
@@ -94,21 +158,37 @@ const uniformNames = [
 
 /** How many photograph samples are averaged per cell, along each axis. */
 const OVERSAMPLE = 3;
-/** Seconds the portrait takes to condense when it first appears. */
-const INTRO_SECONDS = 2.1;
-/** Share of the appearance during which squares start at different times. */
-const STAGGER = 0.62;
+/** Share of an appearance during which squares start at different times. */
+const STAGGER = 0.6;
+/** Larger photographs are scaled down before reaching the GPU. */
+const MAX_PHOTO = 4096;
 
 export class PortraitLayer {
-  private readonly program: Program<(typeof uniformNames)[number]>;
-  private readonly vao: WebGLVertexArrayObject | null;
+  private readonly photo: Program<(typeof photoUniforms)[number]>;
+  private readonly squares: Program<(typeof squareUniforms)[number]>;
+  private readonly photoVao: WebGLVertexArrayObject | null;
+  private readonly squareVao: WebGLVertexArrayObject | null;
   private readonly cornerBuffer: WebGLBuffer | null;
   private readonly stateBuffer: WebGLBuffer | null;
+  private readonly alphaBuffer: WebGLBuffer | null;
   private readonly colorBuffer: WebGLBuffer | null;
+  private readonly photoTexture: WebGLTexture | null;
+  private readonly maskTexture: WebGLTexture | null;
 
   private image: HTMLImageElement | null = null;
   private rect: PortraitRect | null = null;
   private builtFor = "";
+
+  // The photograph's place, and the block of cells it covers.
+  private left = 0;
+  private top = 0;
+  private width = 0;
+  private height = 0;
+  private cols = 0;
+  private rows = 0;
+  private originX = 0;
+  private originY = 0;
+  private spacing = 6;
 
   private count = 0;
   private homeX = new Float32Array(0);
@@ -124,34 +204,30 @@ export class PortraitLayer {
   private spring = new Float32Array(0);
   private driftX = new Float32Array(0);
   private driftY = new Float32Array(0);
-  private column = new Int16Array(0);
-  private row = new Int16Array(0);
-  /** Whether each square currently covers its own cell. */
-  private home = new Uint8Array(0);
+  /** Index of each square's cell in the mask. */
+  private cell = new Int32Array(0);
   private state = new Float32Array(0);
+  private alpha = new Float32Array(0);
+  private mask = new Uint8Array(0);
 
-  /** Bounds of the squares at rest, to tell whether the pointer is near. */
-  private left = 0;
-  private top = 0;
-  private right = 0;
-  private bottom = 0;
-
-  /** Where the director wants the portrait: 0 gone, 1 fully there. */
-  target = 0;
-  private presence = 0;
-  private drawnPresence = -1;
-  private introStartedAt = -1;
+  /**
+   * How far the portrait has arrived, 0 to 1: squares condense during the
+   * first half, the photograph takes over during the second.
+   */
+  arrival = 0;
+  private drawnArrival = -1;
   private restless = false;
-  private stateDirty = false;
+  private dirty = false;
+  private visibleSquares = false;
 
   constructor(private readonly gl: GL) {
-    this.program = createProgram(gl, vertex, fragment, uniformNames);
-    const corner = this.program.attribute("aCorner");
-    const state = this.program.attribute("iState");
-    const color = this.program.attribute("iColor");
-
-    this.vao = gl.createVertexArray();
-    gl.bindVertexArray(this.vao);
+    this.photo = createProgram(gl, photoVertex, photoFragment, photoUniforms);
+    this.squares = createProgram(
+      gl,
+      squareVertex,
+      squareFragment,
+      squareUniforms,
+    );
 
     this.cornerBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.cornerBuffer);
@@ -160,27 +236,84 @@ export class PortraitLayer {
       new Float32Array([-0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5]),
       gl.STATIC_DRAW,
     );
+
+    this.photoVao = gl.createVertexArray();
+    gl.bindVertexArray(this.photoVao);
+    const photoCorner = this.photo.attribute("aCorner");
+    gl.enableVertexAttribArray(photoCorner);
+    gl.vertexAttribPointer(photoCorner, 2, gl.FLOAT, false, 0, 0);
+
+    this.squareVao = gl.createVertexArray();
+    gl.bindVertexArray(this.squareVao);
+    const corner = this.squares.attribute("aCorner");
     gl.enableVertexAttribArray(corner);
     gl.vertexAttribPointer(corner, 2, gl.FLOAT, false, 0, 0);
 
     this.stateBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.stateBuffer);
+    const state = this.squares.attribute("iState");
     gl.enableVertexAttribArray(state);
     gl.vertexAttribPointer(state, 4, gl.FLOAT, false, 0, 0);
     gl.vertexAttribDivisor(state, 1);
 
+    this.alphaBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.alphaBuffer);
+    const alpha = this.squares.attribute("iAlpha");
+    gl.enableVertexAttribArray(alpha);
+    gl.vertexAttribPointer(alpha, 1, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(alpha, 1);
+
     this.colorBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
+    const color = this.squares.attribute("iColor");
     gl.enableVertexAttribArray(color);
     gl.vertexAttribPointer(color, 4, gl.UNSIGNED_BYTE, true, 0, 0);
     gl.vertexAttribDivisor(color, 1);
-
     gl.bindVertexArray(null);
+
+    this.photoTexture = gl.createTexture();
+    this.maskTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.maskTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
   setImage(image: HTMLImageElement) {
+    const { gl } = this;
     this.image = image;
     this.builtFor = "";
+
+    let source: TexImageSource = image;
+    const largest = Math.max(image.naturalWidth, image.naturalHeight);
+    if (largest > MAX_PHOTO) {
+      const scale = MAX_PHOTO / largest;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.naturalWidth * scale);
+      canvas.height = Math.round(image.naturalHeight * scale);
+      canvas
+        .getContext("2d")
+        ?.drawImage(image, 0, 0, canvas.width, canvas.height);
+      source = canvas;
+    }
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.photoTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    // Premultiplied: the silhouette's edge stays clean when filtered.
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_MIN_FILTER,
+      gl.LINEAR_MIPMAP_LINEAR,
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.activeTexture(gl.TEXTURE0);
   }
 
   /** Where the portrait stands, in viewport pixels; null removes it. */
@@ -188,16 +321,22 @@ export class PortraitLayer {
     this.rect = rect;
   }
 
-  /** Whether the squares are on the move, or about to be. */
-  get busy() {
-    return (
-      this.count > 0 &&
-      (this.restless || Math.abs(this.presence - this.target) > 0.001)
-    );
+  /** Whether a photograph has been given and placed. */
+  get ready() {
+    return this.count > 0;
   }
 
-  get visible() {
-    return this.count > 0 && this.presence > 0.003;
+  /** Whether the squares are on the move. */
+  get busy() {
+    return this.count > 0 && (this.restless || this.arrival < 1);
+  }
+
+  /** Centre of the face, for whoever wants to start something from it. */
+  get face() {
+    return {
+      x: this.left + this.width * 0.5,
+      y: this.top + this.height * 0.32,
+    };
   }
 
   private build(grid: CellGrid) {
@@ -257,14 +396,13 @@ export class PortraitLayer {
     const spring = new Float32Array(capacity);
     const driftX = new Float32Array(capacity);
     const driftY = new Float32Array(capacity);
-    const column = new Int16Array(capacity);
-    const row = new Int16Array(capacity);
+    const cell = new Int32Array(capacity);
     const colors = new Uint8Array(capacity * 4);
 
-    // The appearance spreads from the face outwards.
+    // Everything spreads from the face outwards.
     const faceX = left + width * 0.5;
-    const faceY = top + height * 0.34;
-    const farthest = Math.hypot(width * 0.5, height * 0.66);
+    const faceY = top + height * 0.32;
+    const farthest = Math.hypot(width * 0.5, height * 0.68);
     let count = 0;
 
     for (let y = 0; y < rows; y += 1) {
@@ -290,11 +428,7 @@ export class PortraitLayer {
         green /= alpha;
         blue /= alpha;
 
-        // A little more contrast and colour than the photograph: squares
-        // with gaps between them read paler than a continuous picture.
         const grey = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-        const tone = (value: number) =>
-          clamp((grey + (value - grey) * 1.14 - 128) * 1.08 + 126, 0, 255);
         const px = grid.originX + (c0 + x) * spacing;
         const py = grid.originY + (r0 + y) * spacing;
         const grain = hash2(c0 + x, r0 + y, 21);
@@ -303,27 +437,35 @@ export class PortraitLayer {
         homeY[count] = py;
         // Darker means larger, as in a halftone.
         baseSize[count] =
-          spacing * (0.93 - 0.36 * smoothstep(0.3, 0.98, grey / 255));
+          spacing * (0.95 - 0.3 * smoothstep(0.3, 0.98, grey / 255));
         stagger[count] =
-          clamp01(Math.hypot(px - faceX, py - faceY) / farthest) * 0.72 +
-          grain * 0.28;
+          clamp01(Math.hypot(px - faceX, py - faceY) / farthest) * 0.74 +
+          grain * 0.26;
         spring[count] = 0.62 + 0.76 * hash2(c0 + x, r0 + y, 22);
-        // Where the square drifts to as it melts away: up and to the side.
-        const angle = -Math.PI / 2 + (hash2(c0 + x, r0 + y, 23) - 0.5) * 2.4;
-        const reach = spacing * (4 + 20 * hash2(c0 + x, r0 + y, 24));
+        // Where the square comes from as it condenses: below and aside.
+        const angle = Math.PI / 2 + (hash2(c0 + x, r0 + y, 23) - 0.5) * 2.6;
+        const reach = spacing * (3 + 16 * hash2(c0 + x, r0 + y, 24));
         driftX[count] = Math.cos(angle) * reach;
         driftY[count] = Math.sin(angle) * reach;
-        column[count] = c0 + x;
-        row[count] = r0 + y;
-        colors[count * 4] = tone(red);
-        colors[count * 4 + 1] = tone(green);
-        colors[count * 4 + 2] = tone(blue);
+        cell[count] = y * cols + x;
+        colors[count * 4] = red;
+        colors[count * 4 + 1] = green;
+        colors[count * 4 + 2] = blue;
         colors[count * 4 + 3] = 255;
         count += 1;
       }
     }
 
     this.count = count;
+    this.left = left;
+    this.top = top;
+    this.width = width;
+    this.height = height;
+    this.cols = cols;
+    this.rows = rows;
+    this.originX = grid.originX + c0 * spacing;
+    this.originY = grid.originY + r0 * spacing;
+    this.spacing = spacing;
     this.homeX = homeX;
     this.homeY = homeY;
     this.baseSize = baseSize;
@@ -331,21 +473,17 @@ export class PortraitLayer {
     this.spring = spring;
     this.driftX = driftX;
     this.driftY = driftY;
-    this.column = column;
-    this.row = row;
+    this.cell = cell;
     this.offsetX = new Float32Array(count);
     this.offsetY = new Float32Array(count);
     this.speedX = new Float32Array(count);
     this.speedY = new Float32Array(count);
     this.heat = new Float32Array(count);
-    this.home = new Uint8Array(count);
     this.state = new Float32Array(count * 4);
-    this.left = left;
-    this.top = top;
-    this.right = left + width;
-    this.bottom = top + height;
+    this.alpha = new Float32Array(count);
+    this.mask = new Uint8Array(capacity);
     this.restless = false;
-    this.drawnPresence = -1;
+    this.drawnArrival = -1;
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
     gl.bufferData(
@@ -355,17 +493,30 @@ export class PortraitLayer {
     );
     gl.bindBuffer(gl.ARRAY_BUFFER, this.stateBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.state.byteLength, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.alphaBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, this.alpha.byteLength, gl.DYNAMIC_DRAW);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this.maskTexture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.R8,
+      cols,
+      rows,
+      0,
+      gl.RED,
+      gl.UNSIGNED_BYTE,
+      this.mask,
+    );
+    gl.activeTexture(gl.TEXTURE0);
   }
 
-  /**
-   * Moves the squares and hides the grid cells they cover. `still` skips
-   * every animation: the portrait is simply there or not.
-   */
+  /** Moves the squares. `still` skips every animation. */
   update(
     grid: CellGrid,
     pointer: WorldPointer,
     mood: Mood,
-    time: number,
     dt: number,
     still: boolean,
   ) {
@@ -377,68 +528,31 @@ export class PortraitLayer {
       this.build(grid);
     }
     if (this.count === 0) return;
-
-    // The first appearance takes its time; afterwards the director leads.
-    let target = this.target;
-    if (still) {
-      this.presence = target;
-    } else {
-      if (target > 0 && this.introStartedAt < 0) this.introStartedAt = time;
-      if (this.introStartedAt >= 0) {
-        const intro = clamp01((time - this.introStartedAt) / INTRO_SECONDS);
-        target = Math.min(target, intro);
-      }
-      this.presence = damp(this.presence, target, 9, dt);
-      if (Math.abs(this.presence - target) < 0.0005) this.presence = target;
-    }
-    const presence = this.presence;
-    if (presence <= 0.003) {
-      this.drawnPresence = presence;
-      return;
-    }
+    if (still) this.arrival = 1;
 
     const spacing = grid.spacing;
-    const reach = clamp(spacing * 17, 80, 136);
-    const pointerSpeed = Math.hypot(pointer.vx, pointer.vy);
+    const reach = clamp(spacing * 19, 90, 150);
     const near =
       !still &&
+      this.arrival >= 1 &&
       pointer.presence > 0.01 &&
       pointer.x > this.left - reach &&
-      pointer.x < this.right + reach &&
+      pointer.x < this.left + this.width + reach &&
       pointer.y > this.top - reach &&
-      pointer.y < this.bottom + reach;
+      pointer.y < this.top + this.height + reach;
 
-    const moved = presence !== this.drawnPresence;
-    if (near || this.restless || moved) {
-      this.simulate(
-        grid,
-        pointer,
-        mood,
-        presence,
-        near,
-        reach,
-        pointerSpeed,
-        dt,
-      );
-      this.drawnPresence = presence;
-      this.stateDirty = true;
-    }
-
-    // Cells under a square that is in place stay hidden.
-    const { home, column, row, count } = this;
-    for (let index = 0; index < count; index += 1) {
-      if (home[index]) grid.punchCell(column[index], row[index]);
+    if (near || this.restless || this.arrival !== this.drawnArrival) {
+      this.simulate(mood, pointer, near, reach, dt);
+      this.drawnArrival = this.arrival;
+      this.dirty = true;
     }
   }
 
   private simulate(
-    grid: CellGrid,
-    pointer: WorldPointer,
     mood: Mood,
-    presence: number,
+    pointer: WorldPointer,
     near: boolean,
     reach: number,
-    pointerSpeed: number,
     dt: number,
   ) {
     const {
@@ -455,11 +569,14 @@ export class PortraitLayer {
       spring,
       driftX,
       driftY,
-      home,
+      cell,
       state,
+      alpha,
+      mask,
+      spacing,
     } = this;
-    const spacing = grid.spacing;
     const reachSquared = reach * reach;
+    const pointerSpeed = Math.hypot(pointer.vx, pointer.vy);
     const sweepX = clamp(pointer.vx, -1500, 1500);
     const sweepY = clamp(pointer.vy, -1500, 1500);
     // A resting pointer still parts the squares a little.
@@ -469,7 +586,15 @@ export class PortraitLayer {
     const cooling = dt / 0.95;
     const restSize = mood.restSize * spacing;
     const span = 1 - STAGGER;
+    // First the squares condense, then the photograph takes over.
+    const condensed = clamp01(this.arrival / 0.55);
+    const sharpened = clamp01((this.arrival - 0.45) / 0.55);
     let restless = false;
+    let visible = false;
+
+    // Cells with no square of their own (the silhouette's edge) follow the
+    // photograph's arrival as a whole.
+    mask.fill(Math.round((1 - smoothstep(0.55, 1, sharpened)) * 255));
 
     for (let index = 0; index < count; index += 1) {
       let ox = offsetX[index];
@@ -477,6 +602,7 @@ export class PortraitLayer {
       let vx = speedX[index];
       let vy = speedY[index];
       let warmth = heat[index];
+      let touch = 0;
 
       if (near) {
         const dx = homeX[index] + ox - pointer.x;
@@ -501,6 +627,8 @@ export class PortraitLayer {
             dt;
           const hit = force * clamp01(pointerSpeed / 260 + 0.3);
           if (hit > warmth) warmth = hit;
+          // Even untouched, the picture shows its grain near the pointer.
+          touch = force * 1.5;
         }
       }
 
@@ -538,26 +666,38 @@ export class PortraitLayer {
         heat[index] = warmth;
       }
 
-      // Each square has its own moment within the appearance.
+      // Each square has its own moment within the arrival.
       const start = stagger[index] * STAGGER;
-      const local = clamp01((presence - start) / span);
+      const local = clamp01((condensed - start) / span);
       const shown = local * local * (3 - 2 * local);
+      const sharp = smoothstep(start, start + span, sharpened);
       const away = 1 - shown;
-      const drift = away * away;
       const displacement = Math.sqrt(ox * ox + oy * oy);
+
+      // How far this square has taken over from the photograph.
+      const disturbed = clamp01(
+        Math.max(warmth * 1.4, displacement / (spacing * 0.5), touch),
+      );
+      const taken = Math.max(1 - sharp, disturbed);
+      mask[cell[index]] = Math.round(taken * 255);
+
       const base = index * 4;
-      state[base] = homeX[index] + ox + driftX[index] * drift;
-      state[base + 1] = homeY[index] + oy + driftY[index] * drift;
+      state[base] = homeX[index] + ox + driftX[index] * away * away;
+      state[base + 1] = homeY[index] + oy + driftY[index] * away * away;
       state[base + 2] =
         (restSize + (baseSize[index] - restSize) * shown) *
         (1 - 0.45 * clamp01(displacement / (spacing * 16)));
       state[base + 3] = shown;
-      home[index] = shown > 0.5 && displacement < spacing * 0.7 ? 1 : 0;
+      const opacity = taken * smoothstep(0, 0.3, shown);
+      alpha[index] = opacity;
+      if (opacity > 0.003) visible = true;
     }
 
     this.restless = restless;
+    this.visibleSquares = visible;
   }
 
+  /** Draws into whatever framebuffer is bound. */
   draw(
     width: number,
     height: number,
@@ -565,42 +705,97 @@ export class PortraitLayer {
     light: MatrixLight,
     pixelRatio: number,
   ) {
-    if (!this.visible) return;
+    if (this.count === 0 || this.arrival <= 0.003) return;
     const { gl } = this;
-    const { uniforms } = this.program;
 
-    if (this.stateDirty) {
-      this.stateDirty = false;
+    if (this.dirty) {
+      this.dirty = false;
       gl.bindBuffer(gl.ARRAY_BUFFER, this.stateBuffer);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.state, 0, this.count * 4);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.alphaBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.alpha, 0, this.count);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, this.maskTexture);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        this.cols,
+        this.rows,
+        gl.RED,
+        gl.UNSIGNED_BYTE,
+        this.mask,
+      );
     }
 
-    gl.useProgram(this.program.program);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.uniform2f(uniforms.uViewport, width, height);
-    gl.uniform1f(uniforms.uPixelRatio, pixelRatio);
-    gl.uniform2f(
-      uniforms.uResolution,
-      gl.drawingBufferWidth,
-      gl.drawingBufferHeight,
-    );
-    gl.uniform3f(
-      uniforms.uRest,
-      mood.rest[0] / 255,
-      mood.rest[1] / 255,
-      mood.rest[2] / 255,
-    );
-    gl.uniform4f(
-      uniforms.uLight,
-      light.x * pixelRatio,
-      light.y * pixelRatio,
-      light.radius * pixelRatio,
-      light.strength,
-    );
-    gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.count);
+    const bufferWidth = width * pixelRatio;
+    const bufferHeight = height * pixelRatio;
+
+    // The photograph, with holes where its squares have taken over.
+    {
+      const { uniforms } = this.photo;
+      gl.useProgram(this.photo.program);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.photoTexture);
+      gl.uniform1i(uniforms.uPhoto, 2);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, this.maskTexture);
+      gl.uniform1i(uniforms.uMask, 3);
+      gl.uniform2f(uniforms.uViewport, width, height);
+      gl.uniform4f(
+        uniforms.uRect,
+        this.left,
+        this.top,
+        this.width,
+        this.height,
+      );
+      gl.uniform2f(uniforms.uResolution, bufferWidth, bufferHeight);
+      gl.uniform2f(
+        uniforms.uOrigin,
+        this.originX * pixelRatio,
+        this.originY * pixelRatio,
+      );
+      gl.uniform1f(uniforms.uSpacing, this.spacing * pixelRatio);
+      gl.uniform4f(
+        uniforms.uLight,
+        light.x * pixelRatio,
+        light.y * pixelRatio,
+        light.radius * pixelRatio,
+        light.strength,
+      );
+      gl.bindVertexArray(this.photoVao);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+
+    if (this.visibleSquares) {
+      const { uniforms } = this.squares;
+      gl.useProgram(this.squares.program);
+      gl.uniform2f(uniforms.uViewport, width, height);
+      gl.uniform1f(uniforms.uPixelRatio, pixelRatio);
+      gl.uniform2f(uniforms.uResolution, bufferWidth, bufferHeight);
+      gl.uniform3f(
+        uniforms.uRest,
+        mood.rest[0] / 255,
+        mood.rest[1] / 255,
+        mood.rest[2] / 255,
+      );
+      gl.uniform4f(
+        uniforms.uLight,
+        light.x * pixelRatio,
+        light.y * pixelRatio,
+        light.radius * pixelRatio,
+        light.strength,
+      );
+      gl.bindVertexArray(this.squareVao);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.count);
+    }
+
     gl.bindVertexArray(null);
+    gl.activeTexture(gl.TEXTURE0);
     gl.disable(gl.BLEND);
   }
 
@@ -608,8 +803,13 @@ export class PortraitLayer {
     const { gl } = this;
     gl.deleteBuffer(this.cornerBuffer);
     gl.deleteBuffer(this.stateBuffer);
+    gl.deleteBuffer(this.alphaBuffer);
     gl.deleteBuffer(this.colorBuffer);
-    gl.deleteVertexArray(this.vao);
-    gl.deleteProgram(this.program.program);
+    gl.deleteTexture(this.photoTexture);
+    gl.deleteTexture(this.maskTexture);
+    gl.deleteVertexArray(this.photoVao);
+    gl.deleteVertexArray(this.squareVao);
+    gl.deleteProgram(this.photo.program);
+    gl.deleteProgram(this.squares.program);
   }
 }

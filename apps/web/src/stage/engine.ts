@@ -1,38 +1,50 @@
 import { CardsLayer } from "./cards-layer";
-import { CellGrid } from "./cells";
 import type { GL } from "./gl";
-import { CALM_ZONES, MatrixLayer, type MatrixLight } from "./matrix-layer";
+import { HeroScene } from "./hero-scene";
+import { CALM_ZONES, type MatrixLight } from "./matrix-layer";
+import { MatrixScene } from "./matrix-scene";
 import { clamp, damp, damping } from "./math";
 import { approachMood, cloneMood, quietMood, type Mood } from "./moods";
-import { PortraitLayer } from "./portrait-layer";
-import { World, type Scene, type WorldFrame, type WorldPointer } from "./world";
+import type { Scene, WorldPointer } from "./world";
 
 // The stage: one canvas fixed behind the whole page, one WebGL context, one
-// loop. It owns the matrix (cells, figures, portrait) and whatever else is
-// drawn into the same canvas; the page tells it what to show through small
-// setters and through directors, callbacks run at the start of every frame
-// to translate the scroll position into a scene.
+// loop. It draws two matrices and the pictures over them:
+//
+// - the hero, a scene of its own (meadow, birds, the name in relief, the
+//   portrait), drawn straight to the screen while it fills it, and into a
+//   picture once it starts shrinking into a card;
+// - the backdrop, the matrix behind everything else on the page.
+//
+// The page tells the stage what to show through small setters and through
+// directors, callbacks run at the start of every frame that translate the
+// scroll position into a scene.
 
 export type Director = (stage: StageEngine, dt: number) => void;
 
-/** Something else drawn in the stage's canvas, after the matrix. */
+/** Something else drawn in the stage's canvas, after everything. */
 export interface StageLayer {
   /** Returns whether it is animating and needs the next frame at full rate. */
   draw(stage: StageEngine, dt: number): boolean;
   dispose(): void;
 }
 
+/**
+ * How the hero is shown: filling the screen, as a picture on a card, or not
+ * at all.
+ */
+export type HeroMode = "full" | "card" | "hidden";
+
 const MAX_PIXEL_RATIO = 2;
 const MIN_PIXEL_RATIO = 1;
 
 export class StageEngine {
   readonly gl: GL;
-  readonly grid = new CellGrid();
-  readonly world = new World();
-  readonly portrait: PortraitLayer;
-  /** Pictures drawn over the matrix: covers, screenshots. */
+  /** The matrix behind the page. */
+  readonly backdrop: MatrixScene;
+  readonly hero: HeroScene;
+  /** Pictures drawn over the matrix: covers, screenshots, the hero's card. */
   readonly cards: CardsLayer;
-  private readonly matrix: MatrixLayer;
+  heroMode: HeroMode = "full";
   private readonly layers: StageLayer[] = [];
   private readonly directors = new Set<Director>();
 
@@ -45,7 +57,7 @@ export class StageEngine {
   /** Reduced motion: frames are drawn on demand, nothing animates. */
   still: boolean;
 
-  /** Current mood: eases towards the one last set. */
+  /** The backdrop's mood: eases towards the one last set. */
   readonly mood: Mood = cloneMood(quietMood);
   private moodTarget: Mood = quietMood;
   private moodSettled = false;
@@ -57,10 +69,7 @@ export class StageEngine {
   readonly pointer: WorldPointer = { x: 0, y: 0, vx: 0, vy: 0, presence: 0 };
   /** Where the pointer's light is: it trails the pointer a little. */
   readonly light: MatrixLight = { x: 0, y: 0, radius: 260, strength: 0 };
-  /** 0 to 1: lets the page dim the pointer's light. */
-  lightAmount = 1;
-  readonly halo: MatrixLight = { x: 0, y: 0, radius: 1, strength: 0 };
-  private haloTarget: MatrixLight = { x: 0, y: 0, radius: 1, strength: 0 };
+  private readonly noHalo: MatrixLight = { x: 0, y: 0, radius: 1, strength: 0 };
 
   private rawX = 0;
   private rawY = 0;
@@ -73,7 +82,6 @@ export class StageEngine {
   private running = false;
   private disposed = false;
   private pendingStill = false;
-  private gridMoving = false;
   private layersMoving = false;
   private skipped = false;
   // Boxes of text the figures fade behind: elements marked `data-calm`.
@@ -91,7 +99,10 @@ export class StageEngine {
   private readonly reducedMotion: MediaQueryList;
   private readonly resizeObserver: ResizeObserver;
 
-  constructor(readonly canvas: HTMLCanvasElement) {
+  constructor(
+    readonly canvas: HTMLCanvasElement,
+    firstName: string,
+  ) {
     const gl = canvas.getContext("webgl2", {
       alpha: false,
       antialias: false,
@@ -101,8 +112,8 @@ export class StageEngine {
     });
     if (!gl) throw new Error("WebGL2 unavailable");
     this.gl = gl;
-    this.matrix = new MatrixLayer(gl);
-    this.portrait = new PortraitLayer(gl);
+    this.backdrop = new MatrixScene(gl, this.mood, this.pointer);
+    this.hero = new HeroScene(gl, firstName);
     this.cards = new CardsLayer(this);
 
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -137,6 +148,11 @@ export class StageEngine {
 
   // -- What the page asks for ------------------------------------------------
 
+  /** The backdrop's cells: their spacing is the matrix's everywhere. */
+  get grid() {
+    return this.backdrop.grid;
+  }
+
   setMood(mood: Mood) {
     if (mood === this.moodTarget) return;
     this.moodTarget = mood;
@@ -163,14 +179,20 @@ export class StageEngine {
     this.invalidate();
   }
 
+  /** What lives in the backdrop. */
   setScene(scene: Scene | null) {
-    this.world.setScene(scene);
+    this.backdrop.world.setScene(scene);
     this.invalidate();
   }
 
-  /** The scene's own pool of light: where, how wide, how strong (0 to 1). */
-  setHalo(x: number, y: number, radius: number, strength: number) {
-    this.haloTarget = { x, y, radius, strength };
+  /** Sends a ring through the matrix currently on screen. */
+  pulse(x: number, y: number) {
+    if (this.still) return;
+    (this.heroMode === "full" ? this.hero.matrix : this.backdrop).startPulse(
+      x,
+      y,
+    );
+    this.wake(1.6);
   }
 
   /** Runs `director` at the start of every frame. Returns how to remove it. */
@@ -230,10 +252,11 @@ export class StageEngine {
     // plenty: the page keeps its full rate for scrolling.
     const calm =
       !this.still &&
-      !this.gridMoving &&
+      this.heroMode === "hidden" &&
+      !this.backdrop.moving &&
+      !this.backdrop.world.active &&
+      !this.backdrop.pulsing &&
       !this.layersMoving &&
-      !this.world.active &&
-      !this.portrait.busy &&
       this.moodSettled &&
       this.time > this.awakeUntil &&
       this.time - this.pointerMovedAt > 1.2;
@@ -250,38 +273,34 @@ export class StageEngine {
     for (const director of this.directors) director(this, dt);
     this.updatePointer(dt);
     this.updateMood(dt);
-
-    const { grid, world, portrait, mood } = this;
-    const worldFrame: WorldFrame = {
-      grid,
-      width: this.width,
-      height: this.height,
-      time: this.time,
-      palette: mood,
-      pointer: this.pointer,
-    };
-    grid.wake = mood.pale;
-    grid.begin();
-    world.update(worldFrame, dt, this.still);
-    world.draw(worldFrame);
-    portrait.update(grid, this.pointer, mood, this.time, dt, this.still);
-    this.gridMoving = grid.resolve(dt, this.still);
-
-    const { gl } = this;
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    this.matrix.upload(grid);
     this.updateCalm();
-    this.matrix.draw(
-      grid,
-      mood,
-      this.light,
-      this.halo,
-      this.time,
-      this.pixelRatio,
-      this.calm,
-      this.calmCount,
-    );
-    portrait.draw(this.width, this.height, mood, this.light, this.pixelRatio);
+
+    const { gl, hero, backdrop, heroMode, time, pixelRatio } = this;
+    const full = heroMode === "full";
+
+    if (heroMode !== "hidden") {
+      // Only a hero that fills the screen feels the pointer.
+      hero.update(full ? this.pointer : null, time, dt, this.still);
+    }
+    if (heroMode === "card") hero.drawToTexture(time, pixelRatio);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    if (full) {
+      hero.draw(this.light, time, pixelRatio, this.calm, this.calmCount);
+    } else {
+      backdrop.update(this.mood, this.pointer, time, dt, this.still);
+      backdrop.draw(
+        this.mood,
+        this.light,
+        this.noHalo,
+        time,
+        pixelRatio,
+        this.calm,
+        this.calmCount,
+      );
+    }
+
     let moving = this.cards.draw(this, dt);
     for (const layer of this.layers) {
       if (layer.draw(this, dt)) moving = true;
@@ -307,7 +326,12 @@ export class StageEngine {
       if (
         bounds.width === 0 ||
         bounds.bottom < -80 ||
-        bounds.top > this.height + 80
+        bounds.top > this.height + 80 ||
+        // Text that is hidden or faded out keeps nothing clear.
+        element.checkVisibility?.({
+          opacityProperty: true,
+          visibilityProperty: true,
+        }) === false
       ) {
         continue;
       }
@@ -348,15 +372,7 @@ export class StageEngine {
     light.x += (this.rawX - light.x) * trail;
     light.y += (this.rawY - light.y) * trail;
     light.radius = clamp(Math.min(this.width, this.height) * 0.3, 170, 320);
-    light.strength = pointer.presence * this.lightAmount;
-
-    const ease = damping(4, dt);
-    const halo = this.halo;
-    const target = this.haloTarget;
-    halo.x = target.x;
-    halo.y = target.y;
-    halo.radius = target.radius;
-    halo.strength += (target.strength - halo.strength) * ease;
+    light.strength = pointer.presence;
   }
 
   private updateMood(dt: number) {
@@ -375,8 +391,7 @@ export class StageEngine {
       Math.abs(bg[2] - target.bg[2]) +
       Math.abs(rest[0] - target.rest[0]) +
       Math.abs(accent[0] - target.accent[0]) +
-      Math.abs(accent[2] - target.accent[2]) +
-      Math.abs(this.mood.haloAmount - target.haloAmount) * 100;
+      Math.abs(accent[2] - target.accent[2]);
     if (distance < 0.35) {
       approachMood(this.mood, target, 1);
       this.moodSettled = true;
@@ -424,15 +439,8 @@ export class StageEngine {
     this.canvas.height = Math.round(height * pixelRatio);
     // Denser than the eye can count, coarse enough to read as squares.
     const spacing = width < 560 ? 5 : width < 1800 ? 6 : 7;
-    this.grid.resize(width, height, spacing);
-    this.world.resize({
-      grid: this.grid,
-      width,
-      height,
-      time: this.time,
-      palette: this.mood,
-      pointer: this.pointer,
-    });
+    this.backdrop.resize(width, height, spacing);
+    this.hero.resize(width, height, spacing, pixelRatio);
     if (!this.pointerSeen) {
       this.rawX = this.light.x = this.pointer.x = width * 0.5;
       this.rawY = this.light.y = this.pointer.y = height * 0.4;
@@ -492,8 +500,8 @@ export class StageEngine {
     document.removeEventListener("visibilitychange", this.onVisibility);
     for (const layer of this.layers.splice(0)) layer.dispose();
     this.cards.dispose();
-    this.portrait.dispose();
-    this.matrix.dispose();
+    this.hero.dispose();
+    this.backdrop.dispose();
     this.gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
 }

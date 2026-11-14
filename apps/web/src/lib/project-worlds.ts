@@ -1,8 +1,8 @@
 import type { Project } from "@/lib/projects";
 import { Murmuration } from "@/stage/layers/birds";
-import { Butterflies } from "@/stage/layers/butterflies";
 import { Fireflies } from "@/stage/layers/fireflies";
 import { Grass } from "@/stage/layers/grass";
+import { Hummingbirds } from "@/stage/layers/hummingbirds";
 import { KoiPond } from "@/stage/layers/koi";
 import { projectMood, type Mood } from "@/stage/moods";
 import type { Scene } from "@/stage/world";
@@ -10,17 +10,14 @@ import type { Scene } from "@/stage/world";
 // Each project has a world of its own in the matrix: the same grid, in the
 // project's colour, with something alive in it.
 
-type WorldKind = "butterflies" | "koi" | "birds" | "fireflies" | "meadow";
+type WorldKind = "hummingbirds" | "koi" | "birds" | "fireflies" | "meadow";
 
 const scenes: Record<WorldKind, Scene> = {
-  butterflies: [
+  hummingbirds: [
     {
-      key: "world-butterflies",
+      key: "world-hummingbirds",
       create: (frame) =>
-        new Butterflies(frame, {
-          count: frame.width < 700 ? 3 : 6,
-          course: 18,
-        }),
+        new Hummingbirds(frame, { count: frame.width < 700 ? 4 : 8 }),
     },
   ],
   koi: [{ key: "world-koi", create: (frame) => new KoiPond(frame) }],
@@ -31,11 +28,12 @@ const scenes: Record<WorldKind, Scene> = {
   meadow: [
     {
       key: "world-grass",
-      create: (frame) => new Grass(frame, { height: 0.2, warmth: 0.9 }),
+      create: (frame) => new Grass(frame, { height: 0.26, warmth: 0.9 }),
     },
     {
-      key: "world-butterflies-few",
-      create: (frame) => new Butterflies(frame, { count: 2, course: 30 }),
+      key: "world-meadow-birds",
+      create: (frame) =>
+        new Hummingbirds(frame, { count: frame.width < 700 ? 2 : 4 }),
     },
   ],
 };
@@ -43,10 +41,10 @@ const scenes: Record<WorldKind, Scene> = {
 /** Worlds chosen for the projects of the catalog. */
 const chosen: Record<string, WorldKind> = {
   blame: "birds",
-  "amazon-analyzer": "butterflies",
+  "amazon-analyzer": "hummingbirds",
   finvio: "koi",
   finalyzing: "fireflies",
-  "atelier-sophie-sylvestre": "butterflies",
+  "atelier-sophie-sylvestre": "hummingbirds",
   neurastock: "koi",
   "gt3-event": "birds",
   minishell: "meadow",

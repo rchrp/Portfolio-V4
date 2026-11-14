@@ -90,10 +90,9 @@ export function ProjectGallery({
           curveX: 1 / (engine.width * 0.78),
           pivotX: centerX,
           alpha: presence * (1 - smoothstep(1.5, 2.3, distance)),
-          pixel: 0.85 * smoothstep(0.15, 1, distance),
-          dim: 0.4 * smoothstep(0.15, 1.2, distance),
+          dim: 0.25 * smoothstep(0.15, 1.2, distance),
           shadow: 0.8 * (1 - smoothstep(0, 0.7, distance)),
-          radius: 10,
+          radius: 0,
         });
       });
     });
@@ -240,6 +239,7 @@ export function ProjectGallery({
           <div className="gallery-controls">
             <button
               type="button"
+              className="glass"
               aria-label="Capture précédente"
               disabled={index === 0}
               onClick={() => show(index - 1)}
@@ -251,6 +251,7 @@ export function ProjectGallery({
             </span>
             <button
               type="button"
+              className="glass"
               aria-label="Capture suivante"
               disabled={index === images.length - 1}
               onClick={() => show(index + 1)}

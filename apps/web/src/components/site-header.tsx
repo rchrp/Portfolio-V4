@@ -1,15 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type MouseEvent } from "react";
+import type { MouseEvent } from "react";
+import { useEffect } from "react";
 import { restingPoints } from "@/components/keyboard-navigation";
 import { hero } from "@/lib/site-content";
 import { scrollPageTo } from "@/lib/smooth-scroll";
-
-const links = [
-  { id: "projets", label: "Projets" },
-  { id: "contact", label: "Contact" },
-];
 
 /** Glides to where a section rests, rather than to its first pixel. */
 export function scrollToSection(id: string) {
@@ -26,20 +22,17 @@ function jump(event: MouseEvent<HTMLAnchorElement>, id: string) {
   if (scrollToSection(id)) event.preventDefault();
 }
 
-// The page's only fixed chrome: the name, once the hero's own has scrolled
-// away, and three destinations.
+// The page's only fixed chrome: the name, and three destinations on a pane
+// of glass.
 export function SiteHeader() {
-  const [past, setPast] = useState(false);
-
+  // Without the stage, the contact section darkens by itself: the header
+  // turns light once over it. With it, the stage's director sets the tone.
   useEffect(() => {
-    let frame = 0;
     const root = document.documentElement;
     const contact = document.getElementById("contact");
+    let frame = 0;
     const measure = () => {
       frame = 0;
-      setPast(window.scrollY > window.innerHeight * 0.55);
-      // With the stage, its director sets the tone. Without it, the contact
-      // section darkens by itself: the header turns light once over it.
       if (root.dataset.stage === "on" || !contact) return;
       const { top } = contact.getBoundingClientRect();
       root.dataset.tone =
@@ -57,24 +50,22 @@ export function SiteHeader() {
   }, []);
 
   return (
-    <header className="site-header" data-past-hero={past || undefined}>
+    <header className="site-header">
       <a
         href="#accueil"
         className="site-mark"
         onClick={(event) => jump(event, "accueil")}
-        tabIndex={past ? undefined : -1}
-        aria-hidden={past ? undefined : true}
       >
         <span className="site-mark-dot" aria-hidden="true" />
-        {hero.firstName} {hero.lastName}
+        {hero.firstName.charAt(0)}. {hero.lastName}
       </a>
-      <nav className="site-nav" aria-label="Navigation principale">
-        <a href="#projets" onClick={(event) => jump(event, links[0].id)}>
-          {links[0].label}
+      <nav className="site-nav glass" aria-label="Navigation principale">
+        <a href="#projets" onClick={(event) => jump(event, "projets")}>
+          Projets
         </a>
         <Link href="/parcours">Parcours</Link>
-        <a href="#contact" onClick={(event) => jump(event, links[1].id)}>
-          {links[1].label}
+        <a href="#contact" onClick={(event) => jump(event, "contact")}>
+          Contact
         </a>
       </nav>
     </header>

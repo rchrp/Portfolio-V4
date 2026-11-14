@@ -19,7 +19,7 @@ export function HeroActions() {
         Me contacter
       </a>
       <a
-        className="button button-quiet"
+        className="button glass"
         href="#projets"
         onClick={(event) => jump(event, "projets")}
       >

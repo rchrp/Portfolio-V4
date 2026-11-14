@@ -13,6 +13,11 @@ import type { Mood } from "./moods";
 // and decides whether it falls inside the cell's square. Resting dots, the
 // pointer's light and the scene's halo are all computed here, so an idle
 // matrix costs one texture read per pixel and nothing on the CPU.
+//
+// A matrix can also be drawn as a veil over what is already on screen: cut
+// into blocks of a few cells, each block opening from its edges inwards, in
+// a sweep from the bottom right. That is how the backdrop takes the hero's
+// place: the hero is not moved, it is covered square by square.
 
 /** Most boxes of text the shader keeps clear at once. */
 export const CALM_ZONES = 8;
@@ -48,6 +53,8 @@ uniform vec4 uCalm[CALM_ZONES];
 uniform int uCalmCount;
 // A ring travelling through the resting dots: xy centre, z radius, w strength.
 uniform vec4 uPulse;
+// x: how much of the screen this matrix covers, 0 to 1; y: a block's side.
+uniform vec2 uVeil;
 
 out vec4 fragColor;
 
@@ -59,6 +66,20 @@ float hash(vec2 p) {
 
 void main() {
   vec2 pixel = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
+
+  if (uVeil.x < 1.0) {
+    // Blocks hold whole cells. Each has its turn: the bottom right first,
+    // the top left last, no two neighbours quite together.
+    vec2 inBlocks = (pixel - uOrigin + 0.5 * uSpacing) / uVeil.y;
+    vec2 block = floor(inBlocks);
+    vec2 place = (block + 0.5) * uVeil.y / uResolution;
+    float turn = (1.0 - 0.5 * (place.x + place.y)) * 0.72 + hash(block) * 0.28;
+    float covered = smoothstep(turn - 0.07, turn + 0.07, uVeil.x * 1.14 - 0.07);
+    // What lies underneath shows as a square that shrinks to nothing.
+    vec2 inBlock = abs(fract(inBlocks) - 0.5);
+    if (max(inBlock.x, inBlock.y) < 0.5 * (1.0 - covered)) discard;
+  }
+
   vec2 cell = floor((pixel - uOrigin) / uSpacing + 0.5);
   vec2 center = uOrigin + cell * uSpacing;
 
@@ -150,7 +171,11 @@ const uniformNames = [
   "uCalm",
   "uCalmCount",
   "uPulse",
+  "uVeil",
 ] as const;
+
+/** Cells along the side of one block of a veil. */
+const VEIL_CELLS = 3;
 
 export type MatrixLight = {
   x: number;
@@ -230,6 +255,8 @@ export class MatrixLayer {
     calm: Float32Array,
     calmCount: number,
     pulse: MatrixLight,
+    /** Share of the screen drawn, 0 to 1: under 1, the rest is left as is. */
+    cover = 1,
   ) {
     const { gl } = this;
     const { uniforms } = this.program;
@@ -307,6 +334,7 @@ export class MatrixLayer {
       pulse.radius * pixelRatio,
       pulse.strength,
     );
+    gl.uniform2f(uniforms.uVeil, cover, grid.spacing * pixelRatio * VEIL_CELLS);
     gl.uniform4fv(uniforms.uCalm, calm);
     gl.uniform1i(uniforms.uCalmCount, calmCount);
     gl.bindVertexArray(this.vao);

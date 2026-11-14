@@ -10,9 +10,9 @@ import { duskScene } from "@/stage/scenes";
 const PORTRAIT = "/portrait.webp";
 
 // Translates where the page is into what the stage shows: the hero filling
-// the screen at the top, then drawing back into a card of the carousel; a
-// quiet matrix behind the projects; a project's own world while one is open;
-// sunset, then the meadow by night, at the contact section.
+// the screen at the top, then covered block by block as the carousel comes
+// in; a quiet matrix behind the projects; a project's own world while one is
+// open; sunset, then the meadow by night, at the contact section.
 export function HomeDirector() {
   const stage = useStage();
 
@@ -76,19 +76,18 @@ export function HomeDirector() {
         }
       }
 
-      // The hero fills the screen at the top, is a card while it is near
-      // the middle of the carousel, and is left alone otherwise.
+      // The hero fills the screen at the top. It does not move when the
+      // page scrolls on: the backdrop covers it while the first project
+      // comes in, and it is left alone once nothing of it shows.
       const onScreen = frame ? frame.bottom > 0 : false;
+      const leave = smoothstep(0.03, 0.82, position);
+      engine.heroLeave = leave;
       engine.heroMode =
-        !onScreen || (project && opened > 0.6)
+        !onScreen || leave >= 1 || (project && opened > 0.6)
           ? "hidden"
-          : position <= 0 && opened === 0
+          : leave <= 0
             ? "full"
-            : position < 2.4
-              ? "card"
-              : "hidden";
-
-      engine.heroSmall = position > 0.3;
+            : "leaving";
 
       // Contact: night falls as the section rises into view.
       const contactTop = contact

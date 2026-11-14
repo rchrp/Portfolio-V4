@@ -5,8 +5,8 @@ import type { Mood } from "./moods";
 import { World, type WorldFrame, type WorldPointer } from "./world";
 
 // One matrix: a grid of cells, the world that lives in it, and the texture
-// and shader that draw it. The stage has two: the hero's, which can be drawn
-// into a picture of its own, and the backdrop behind the rest of the page.
+// and shader that draw it. The stage has two: the hero's, and the backdrop
+// behind the rest of the page.
 
 /** Pixels per second a pulse travels, and seconds it lasts. */
 const PULSE_SPEED = 1500;
@@ -82,7 +82,10 @@ export class MatrixScene {
     }
   }
 
-  /** Draws into whatever framebuffer is bound. */
+  /**
+   * Draws into whatever framebuffer is bound. With `cover` under 1, only
+   * that share of the screen is drawn, as a veil over what is there.
+   */
   draw(
     mood: Mood,
     light: MatrixLight,
@@ -91,6 +94,7 @@ export class MatrixScene {
     pixelRatio: number,
     calm: Float32Array = noCalm,
     calmCount = 0,
+    cover = 1,
   ) {
     this.matrix.upload(this.grid);
     this.matrix.draw(
@@ -103,6 +107,7 @@ export class MatrixScene {
       calm,
       calmCount,
       this.pulse,
+      cover,
     );
   }
 

@@ -33,10 +33,11 @@ const coverOf = (project: Project) =>
   project.imageUrl ?? "/projects/placeholder.svg";
 
 // The projects, as the rest of the story the hero opens. The stage draws the
-// carousel: the hero's card first, then one cover per project, on a roller
-// the scroll turns. The page keeps what is not a picture: the list of names,
-// where the project in focus is marked, the button laid over its cover, and
-// the project's own page, which that cover opens into.
+// carousel: one cover per project, on a helix the scroll turns, coming up
+// from the bottom right while the hero is covered. The page keeps what is
+// not a picture: the list of names, where the project in focus is marked,
+// the button laid over its cover, and the project's own page, which that
+// cover opens into.
 export function Projects({ catalog }: { catalog: ProjectCatalog }) {
   const { projects } = catalog;
   const stage = useStage();
@@ -45,7 +46,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
   const stickyRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLElement | null>(null);
   const carouselRef = useRef<Carousel | null>(null);
-  /** Card in focus: 0 is the hero, 1 the first project. */
+  /** Where the story stands: 0 is the hero, 1 the first project. */
   const focusRef = useRef(0);
   const [focus, setFocus] = useState(0);
 
@@ -75,10 +76,11 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     return () => window.clearTimeout(timeout);
   }, [leaving]);
 
-  // The first card of the carousel is the hero: it has no picture to load.
-  const sources = useMemo(() => ["", ...projects.map(coverOf)], [projects]);
+  const sources = useMemo(() => projects.map(coverOf), [projects]);
+  /** Resting points of the story: the hero, then each project. */
+  const stops = sources.length + 1;
 
-  /** Scroll position at which a card of the carousel is in focus. */
+  /** Scroll position of a resting point of the story. */
   const stopOf = useCallback((card: number) => {
     const track = trackRef.current;
     if (!track) return 0;
@@ -140,11 +142,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     const release = stage.direct((engine, dt) => {
       const height = window.innerHeight;
       const bounds = track.getBoundingClientRect();
-      const target = clamp(
-        -bounds.top / (STEP * height),
-        0,
-        sources.length - 1,
-      );
+      const target = clamp(-bounds.top / (STEP * height), 0, sources.length);
       const visible = bounds.bottom > -height * 0.2 && bounds.top < height;
       const cover = coverRef.current?.getBoundingClientRect() ?? null;
       // Past its last project, the story fades before night falls on the
@@ -169,7 +167,9 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       // The page follows the carousel as drawn, not as asked for.
       direction.story.position = carousel.position;
       direction.story.opened = carousel.opened;
-      const rounded = Math.round(carousel.position * 500) / 500;
+      // Nothing on the page reads it past the first project: left alone
+      // there, turning the carousel restyles nothing.
+      const rounded = Math.round(Math.min(1, carousel.position) * 500) / 500;
       if (rounded !== told) {
         told = rounded;
         story.style.setProperty("--story", String(rounded));
@@ -196,7 +196,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
 
     // Covers load once the page is idle, before they are scrolled to.
     const preload = window.setTimeout(() => {
-      for (const src of sources) if (src) stage.cards.preload(src);
+      for (const src of sources) stage.cards.preload(src);
     }, 1400);
 
     return () => {
@@ -223,9 +223,9 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       const target = clamp(
         -track.getBoundingClientRect().top / (STEP * window.innerHeight),
         0,
-        sources.length - 1,
+        sources.length,
       );
-      story.style.setProperty("--story", target.toFixed(3));
+      story.style.setProperty("--story", Math.min(1, target).toFixed(3));
       const card = Math.round(target);
       if (card !== focusRef.current) {
         focusRef.current = card;
@@ -245,13 +245,13 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     };
   }, [stage, sources.length]);
 
-  // The wheel settles on a card rather than between two.
+  // The wheel settles on a project rather than between two.
   useEffect(() => {
     let release = () => {};
     const place = () => {
       release();
       release = magnetizeScroll(
-        sources.map((_, card) => Math.round(stopOf(card))),
+        Array.from({ length: stops }, (_, card) => Math.round(stopOf(card))),
       );
     };
     place();
@@ -260,7 +260,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       window.removeEventListener("resize", place);
       release();
     };
-  }, [sources, stopOf]);
+  }, [stops, stopOf]);
 
   // Opening a project: the page stays where it is, held behind.
   const openedOnce = useRef(false);
@@ -274,7 +274,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       const direct = !openedOnce.current && away;
       if (away) scrollPageTo(stopOf(card), true);
       if (direct) carousel?.jumpTo(card);
-      carousel?.setOpen(card, direct);
+      carousel?.setOpen(openIndex, direct);
       openedOnce.current = true;
       holdPageScroll(true);
       root.dataset.detail = "open";
@@ -314,9 +314,9 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
       <div
         ref={trackRef}
         className="work"
-        data-nav-stops={sources
-          .map((_, card) => (card * STEP).toFixed(2))
-          .join(" ")}
+        data-nav-stops={Array.from({ length: stops }, (_, card) =>
+          (card * STEP).toFixed(2),
+        ).join(" ")}
         style={
           {
             "--count": projects.length,
@@ -365,8 +365,12 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
               aria-label={`Ouvrir le projet ${project.title}`}
               onClick={() => open(active)}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverOf(project)} alt="" loading="lazy" />
+              {/* With the stage, the picture is its to draw: a second copy
+                  here would be decoded again at every change of project. */}
+              {!stage && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={coverOf(project)} alt="" loading="lazy" />
+              )}
               <span className="work-cover-hint glass" aria-hidden="true">
                 Ouvrir
               </span>

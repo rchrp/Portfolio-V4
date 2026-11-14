@@ -12,9 +12,9 @@ import type { Scene, WorldPointer } from "./world";
 // loop. It draws two matrices and the pictures over them:
 //
 // - the hero, a scene of its own (meadow, birds, the name in relief, the
-//   portrait), drawn straight to the screen while it fills it, and into a
-//   picture once it starts shrinking into a card;
-// - the backdrop, the matrix behind everything else on the page.
+//   portrait), which fills the screen at the top of the page;
+// - the backdrop, the matrix behind everything else. When the page scrolls
+//   on, it is drawn over the hero as a veil that closes block by block.
 //
 // The page tells the stage what to show through small setters and through
 // directors, callbacks run at the start of every frame that translate the
@@ -30,10 +30,10 @@ export interface StageLayer {
 }
 
 /**
- * How the hero is shown: filling the screen, as a picture on a card, or not
- * at all.
+ * How the hero is shown: filling the screen, being covered by the backdrop,
+ * or not at all.
  */
-export type HeroMode = "full" | "card" | "hidden";
+export type HeroMode = "full" | "leaving" | "hidden";
 
 const MAX_PIXEL_RATIO = 2;
 const MIN_PIXEL_RATIO = 1;
@@ -43,13 +43,13 @@ export class StageEngine {
   /** The matrix behind the page. */
   readonly backdrop: MatrixScene;
   readonly hero: HeroScene;
-  /** Pictures drawn over the matrix: covers, screenshots, the hero's card. */
+  /** Pictures drawn over the matrix: covers and screenshots. */
   readonly cards: CardsLayer;
   /** Liquid glass under the page's floating controls. */
   private readonly glass: GlassLayer;
   heroMode: HeroMode = "full";
-  /** Whether the hero's card is drawn well under the hero's own size. */
-  heroSmall = false;
+  /** While the hero is leaving: how much of it the backdrop has covered. */
+  heroLeave = 0;
   private readonly layers: StageLayer[] = [];
   private readonly directors = new Set<Director>();
 
@@ -282,21 +282,14 @@ export class StageEngine {
     this.updateCalm();
 
     const { gl, hero, backdrop, heroMode, time, pixelRatio } = this;
-    const full = heroMode === "full";
-
-    if (heroMode !== "hidden") {
-      // Only a hero that fills the screen feels the pointer.
-      hero.update(full ? this.pointer : null, time, dt, this.still);
-    }
-    if (heroMode === "card") {
-      hero.drawToTexture(time, pixelRatio, this.heroSmall);
-    }
-
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    if (full) {
+
+    if (heroMode !== "hidden") {
+      hero.update(this.pointer, time, dt, this.still);
       hero.draw(this.light, time, pixelRatio, this.calm, this.calmCount);
-    } else {
+    }
+    if (heroMode !== "full") {
       backdrop.update(this.mood, this.pointer, time, dt, this.still);
       backdrop.draw(
         this.mood,
@@ -306,6 +299,7 @@ export class StageEngine {
         pixelRatio,
         this.calm,
         this.calmCount,
+        heroMode === "leaving" ? this.heroLeave : 1,
       );
     }
 
@@ -449,7 +443,7 @@ export class StageEngine {
     // Denser than the eye can count, coarse enough to read as squares.
     const spacing = width < 560 ? 5 : width < 1800 ? 6 : 7;
     this.backdrop.resize(width, height, spacing);
-    this.hero.resize(width, height, spacing, pixelRatio);
+    this.hero.resize(width, height, spacing);
     if (!this.pointerSeen) {
       this.rawX = this.light.x = this.pointer.x = width * 0.5;
       this.rawY = this.light.y = this.pointer.y = height * 0.4;

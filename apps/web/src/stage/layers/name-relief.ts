@@ -2,9 +2,11 @@ import { clamp01, damping, smoothstep } from "../math";
 import type { Layer, WorldFrame } from "../world";
 
 // A word standing in the matrix, in relief. Its letters are rasterised once
-// into the grid; every frame, each cell is either on a letter's face, on the
-// side the letter throws away from the light, or neither. The light is the
-// pointer: move it and the relief turns, as a sundial's shadow would.
+// into the grid; every frame, each cell is either under a letter's face, on
+// the side the letter throws away from the light, or neither. This layer
+// draws the sides, in cells; the face itself is set in plain type over them
+// (see `name-face.ts`). The light is the pointer: move it and the relief
+// turns, as a sundial's shadow would.
 
 export type ReliefRect = {
   x: number;
@@ -20,6 +22,28 @@ export type ReliefOptions = {
   /** 0: flat in the grid; 1: fully risen. Letters rise one after another. */
   rise: () => number;
 };
+
+/** How the word is set, for whoever draws its face over the sides. */
+export type ReliefSetting = {
+  text: string;
+  family: string;
+  /** In viewport pixels. */
+  fontSize: number;
+  /** Where the text starts, and its baseline. */
+  x: number;
+  baseline: number;
+  /** The cells the word and its sides can reach. */
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  /** Changes whenever the word is set again. */
+  version: number;
+};
+
+/** How far a letter has risen, from the word's rise and where it stands. */
+export const letterRise = (rise: number, across: number) =>
+  smoothstep(0, 1, rise * 1.7 - across * 0.7);
 
 /** Samples per cell, along each axis, when rasterising the letters. */
 const OVERSAMPLE = 3;
@@ -37,6 +61,9 @@ export class NameRelief implements Layer {
   // Which way the sides are thrown, eased as the light moves.
   private castX = 0.6;
   private castY = 0.8;
+  private version = 0;
+  /** How the word is currently set; null until it has been. */
+  setting: ReliefSetting | null = null;
 
   constructor(private readonly options: ReliefOptions) {
     const family = getComputedStyle(document.body).fontFamily;
@@ -127,6 +154,19 @@ export class NameRelief implements Layer {
     this.rows = rows;
     this.firstColumn = c0;
     this.firstRow = r0;
+    this.version += 1;
+    this.setting = {
+      text: this.options.text,
+      family,
+      fontSize,
+      x: rect.x + metrics.actualBoundingBoxLeft * scale,
+      baseline: top + metrics.actualBoundingBoxAscent * scale,
+      left,
+      top: above,
+      width: cols * spacing,
+      height: rows * spacing,
+      version: this.version,
+    };
   }
 
   resize() {
@@ -169,27 +209,17 @@ export class NameRelief implements Layer {
     const length = Math.hypot(this.castX, this.castY) || 1;
     const stepX = this.castX / length;
     const stepY = this.castY / length;
-    const { ink, accent, accent2 } = palette;
+    const { accent, accent2 } = palette;
 
     for (let row = 0; row < rows; row += 1) {
       for (let column = 0; column < cols; column += 1) {
         // Letters rise from left to right.
-        const local = smoothstep(0, 1, rise * 1.7 - (column / cols) * 0.7);
+        const local = letterRise(rise, column / cols);
         if (local <= 0) continue;
-        const face = coverage[row * cols + column];
-        if (face > 0.04) {
-          grid.plot(
-            firstColumn + column,
-            firstRow + row,
-            face * local,
-            ink[0],
-            ink[1],
-            ink[2],
-          );
-          if (face > 0.6) continue;
-        }
+        // Under a face: the type set over the cells covers it.
+        if (coverage[row * cols + column] > 0.6) continue;
 
-        // Not on a face: perhaps on the side a face throws.
+        // Not under a face: perhaps on the side a face throws.
         const reach = Math.round(depth * local);
         for (let far = 1; far <= reach; far += 1) {
           const fromColumn = column - Math.round(stepX * far);

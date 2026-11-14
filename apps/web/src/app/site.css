@@ -141,21 +141,13 @@ html[data-tone="dark"]
   color: #fff;
 }
 
-/* Three squares of the matrix, stepping down. */
-.button-arrow {
-  position: relative;
-  width: 0.3rem;
-  height: 0.3rem;
-  background: currentColor;
-  box-shadow:
-    0 0.5rem 0 currentColor,
-    0 -0.5rem 0 currentColor;
-  opacity: 0.85;
+.button svg {
+  flex: none;
   transition: transform 320ms var(--ease);
 }
 
-.button:is(:hover, :focus-visible) .button-arrow {
-  transform: translateY(0.25rem);
+.hero-actions .button:is(:hover, :focus-visible) svg {
+  transform: translateY(0.2rem);
 }
 
 /* -- Header ---------------------------------------------------------------- */
@@ -250,7 +242,8 @@ html[data-tone="dark"] .site-nav a:is(:hover, :focus-visible) {
 /* -- The story: hero, then projects ---------------------------------------- */
 
 /* Both are held on screen while the page scrolls underneath. `--story` is
-   where the carousel stands: 0 on the hero, 1 on the first project. */
+   how far the story has left the hero: 0 on it, 1 from the first project
+   on. */
 .story {
   --story: 0;
   position: relative;
@@ -276,13 +269,14 @@ html[data-stage="off"] .story-hero {
   height: 100%;
 }
 
-/* The hero's words leave as soon as it starts drawing back into a card. */
+/* The hero's words leave first, before the matrix covers what the stage
+   draws of it. */
 .hero-main {
   position: absolute;
   top: 50%;
   left: var(--page-gutter);
   width: var(--name-width);
-  opacity: clamp(0, calc(1 - var(--story) * 9), 1);
+  opacity: clamp(0, calc(1 - (var(--story) - 0.02) * 6), 1);
   transform: translateY(-52%);
 }
 
@@ -359,9 +353,9 @@ html[data-stage="off"] .hero-name-slot {
    frame, cut below the chest. */
 .hero-portrait {
   position: absolute;
-  top: -1.5svh;
-  left: calc(71vw - 49.5svh);
-  height: 132svh;
+  top: 7.5svh;
+  left: calc(71vw - 45svh);
+  height: 120svh;
   aspect-ratio: 3 / 4;
 }
 
@@ -453,7 +447,7 @@ html[data-stage="off"] .hero-portrait-fallback {
      story; the values here stand in until it does, and where it cannot. */
   --card-x: 59.5vw;
   --card-y: 50svh;
-  --card-width: min(60vw, clamp(260px, 64svh, 760px) * 16 / 9);
+  --card-width: min(60vw, 59.7svh * 16 / 9);
   --card-height: calc(var(--card-width) * 9 / 16);
   position: sticky;
   top: 0;
@@ -590,18 +584,18 @@ html[data-stage="off"] .hero-portrait-fallback {
   height: 100%;
   object-fit: cover;
   opacity: 0;
+  box-shadow: 0 1.5rem 3rem rgb(43 27 17 / 0.16);
 }
 
 html[data-stage="off"] .work-cover img {
   opacity: 1;
-  box-shadow: 0 1.5rem 3rem rgb(43 27 17 / 0.16);
 }
 
 /* Says the cover opens, when it is pointed at or reached by keyboard. */
 .work-cover-hint {
   position: absolute;
-  right: 1rem;
-  bottom: 1rem;
+  right: 2rem;
+  bottom: 1.5rem;
   display: inline-flex;
   align-items: center;
   min-height: 2.5rem;
@@ -708,10 +702,6 @@ html:not([data-stage="on"]) .contact {
   .contact-content[data-shown] .contact-way,
   .contact-content[data-shown] .contact-profiles > * {
     animation: rise-in 900ms var(--ease) both;
-  }
-
-  .contact-content[data-shown] > :is(.contact-ways, .contact-profiles) {
-    opacity: 1;
   }
 
   .contact-content[data-shown] .contact-way:nth-child(1) {

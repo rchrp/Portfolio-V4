@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowDown } from "lucide-react";
 import type { MouseEvent } from "react";
 import { scrollToSection } from "@/components/site-header";
 
@@ -24,7 +25,7 @@ export function HeroActions() {
         onClick={(event) => jump(event, "projets")}
       >
         Voir les projets
-        <span className="button-arrow" aria-hidden="true" />
+        <ArrowDown size={17} strokeWidth={1.75} aria-hidden="true" />
       </a>
     </div>
   );

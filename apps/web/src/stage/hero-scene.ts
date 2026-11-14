@@ -6,25 +6,19 @@ import type { MatrixLight } from "./matrix-layer";
 import { MatrixScene } from "./matrix-scene";
 import { clamp01, damp, smoothstep } from "./math";
 import { cloneMood, goldenMood, type Mood } from "./moods";
+import { NameFace } from "./name-face";
 import { PortraitLayer } from "./portrait-layer";
 import type { Scene, WorldPointer } from "./world";
 
 // The hero: a meadow at golden hour, hummingbirds, a first name standing in
 // relief in the matrix, and the portrait. It is a scene of its own, with its
-// own grid, so that it can be drawn either straight to the screen or into a
-// picture: scrolling away from it, the whole hero shrinks into a card and
-// takes its place among the projects.
+// own grid: when the page scrolls on, it stays where it is and the stage
+// draws the backdrop over it, block by block (see `MatrixLayer`'s veil).
 
 /** Seconds the hero takes to arrive when the page opens. */
 const INTRO_SECONDS = 3.2;
 /** Seconds to wait for the photograph and the type before starting anyway. */
 const PATIENCE_SECONDS = 2.5;
-
-export type HeroSurface = {
-  texture: WebGLTexture;
-  width: number;
-  height: number;
-};
 
 const absent: WorldPointer = { x: 0, y: 0, vx: 0, vy: 0, presence: 0 };
 const dark: MatrixLight = { x: 0, y: 0, radius: 1, strength: 0 };
@@ -39,11 +33,8 @@ export class HeroScene {
   intro = 0;
 
   private readonly relief: NameRelief;
+  private readonly face: NameFace;
   private readonly halo: MatrixLight = { x: 0, y: 0, radius: 1, strength: 0 };
-  private readonly framebuffer: WebGLFramebuffer | null;
-  private readonly texture: WebGLTexture | null;
-  private textureWidth = 0;
-  private textureHeight = 0;
   private width = 1;
   private height = 1;
   private waited = 0;
@@ -51,16 +42,14 @@ export class HeroScene {
   private nextBeat = 0.2;
   private readonly arrived: Scene;
 
-  constructor(
-    private readonly gl: GL,
-    firstName: string,
-  ) {
+  constructor(gl: GL, firstName: string) {
     this.matrix = new MatrixScene(gl, this.mood, absent);
     this.portrait = new PortraitLayer(gl);
+    this.face = new NameFace(gl);
     this.relief = new NameRelief({
       text: firstName,
       rect: () => this.nameRect,
-      rise: () => smoothstep(0, 0.5, this.intro),
+      rise: () => this.rise,
     });
     const relief = { key: "hero-relief", create: () => this.relief };
     // The letters are measured from the start; the meadow and the birds
@@ -74,72 +63,18 @@ export class HeroScene {
       },
       { key: "hero-birds", create: (frame) => new Hummingbirds(frame) },
     ];
-
-    this.framebuffer = gl.createFramebuffer();
-    this.texture = gl.createTexture();
   }
 
-  resize(width: number, height: number, spacing: number, pixelRatio: number) {
-    const { gl } = this;
+  /** How far the first name has risen out of the matrix, 0 to 1. */
+  private get rise() {
+    return smoothstep(0, 0.5, this.intro);
+  }
+
+  resize(width: number, height: number, spacing: number) {
     this.width = width;
     this.height = height;
     this.matrix.resize(width, height, spacing);
     this.relief.resize();
-
-    const textureWidth = Math.round(width * pixelRatio);
-    const textureHeight = Math.round(height * pixelRatio);
-    if (
-      textureWidth === this.textureWidth &&
-      textureHeight === this.textureHeight
-    ) {
-      return;
-    }
-    this.textureWidth = textureWidth;
-    this.textureHeight = textureHeight;
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA8,
-      textureWidth,
-      textureHeight,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      null,
-    );
-    // Mipmapped: shrunk into a card, the fine grid must not shimmer.
-    gl.texParameteri(
-      gl.TEXTURE_2D,
-      gl.TEXTURE_MIN_FILTER,
-      gl.LINEAR_MIPMAP_LINEAR,
-    );
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER,
-      gl.COLOR_ATTACHMENT0,
-      gl.TEXTURE_2D,
-      this.texture,
-      0,
-    );
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.activeTexture(gl.TEXTURE0);
-  }
-
-  /** The hero as a picture, once it has been drawn into one. */
-  get surface(): HeroSurface | null {
-    return this.texture && this.textureWidth > 0
-      ? {
-          texture: this.texture,
-          width: this.textureWidth,
-          height: this.textureHeight,
-        }
-      : null;
   }
 
   /** Whether something in the hero is moving. */
@@ -152,10 +87,7 @@ export class HeroScene {
     );
   }
 
-  /**
-   * Advances the hero. `pointer` is the visitor's, or absent while the hero
-   * is only a card.
-   */
+  /** Advances the hero. `pointer` is the visitor's, when there is one. */
   update(
     pointer: WorldPointer | null,
     time: number,
@@ -219,36 +151,21 @@ export class HeroScene {
       calm,
       calmCount,
     );
+    // The name's face lies on the cells of its sides; the portrait stands
+    // in front of both.
+    this.face.draw(
+      this.relief.setting,
+      this.rise,
+      this.matrix.grid,
+      this.mood,
+      pixelRatio,
+    );
     this.portrait.draw(this.width, this.height, this.mood, lamp, pixelRatio);
   }
 
-  /**
-   * Draws the hero into its own picture, for the card it becomes. `small`
-   * says the card is well under the picture's size: it then needs smaller
-   * copies of itself, or the fine grid would shimmer.
-   */
-  drawToTexture(time: number, pixelRatio: number, small: boolean) {
-    const { gl } = this;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
-    gl.viewport(0, 0, this.textureWidth, this.textureHeight);
-    this.draw(null, time, pixelRatio);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
-    if (small) gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(
-      gl.TEXTURE_2D,
-      gl.TEXTURE_MIN_FILTER,
-      small ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR,
-    );
-    gl.activeTexture(gl.TEXTURE0);
-  }
-
   dispose() {
-    const { gl } = this;
     this.matrix.dispose();
+    this.face.dispose();
     this.portrait.dispose();
-    gl.deleteFramebuffer(this.framebuffer);
-    gl.deleteTexture(this.texture);
   }
 }

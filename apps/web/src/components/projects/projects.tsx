@@ -210,6 +210,41 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     };
   }, [stage, sources]);
 
+  // Without the stage, the page still follows the scroll by itself: which
+  // project is in focus, and how far the hero's words have gone.
+  useEffect(() => {
+    if (stage) return;
+    const track = trackRef.current;
+    const story = track?.closest<HTMLElement>(".story");
+    if (!track || !story) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const target = clamp(
+        -track.getBoundingClientRect().top / (STEP * window.innerHeight),
+        0,
+        sources.length - 1,
+      );
+      story.style.setProperty("--story", target.toFixed(3));
+      const card = Math.round(target);
+      if (card !== focusRef.current) {
+        focusRef.current = card;
+        setFocus(card);
+      }
+    };
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(measure);
+    };
+    schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [stage, sources.length]);
+
   // The wheel settles on a card rather than between two.
   useEffect(() => {
     let release = () => {};
@@ -301,7 +336,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
             <h2>Projets</h2>
             <ol>
               {projects.map((item, index) => (
-                <li key={item.slug}>
+                <li key={item.slug} style={{ "--i": index } as CSSProperties}>
                   <button
                     type="button"
                     aria-current={index === active ? "true" : undefined}

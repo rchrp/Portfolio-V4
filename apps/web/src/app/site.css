@@ -43,6 +43,23 @@
   }
 }
 
+/* Leaving for another page: the home page sinks into the dark the next one
+   opens on. */
+html[data-leaving] {
+  background: #0c0b09;
+  transition: background-color 420ms ease;
+}
+
+html[data-leaving] body {
+  background: transparent;
+}
+
+html[data-leaving] :is(.site, .site-header, .stage) {
+  opacity: 0;
+  transition: opacity 380ms ease;
+  animation: none;
+}
+
 /* -- Glass ----------------------------------------------------------------- */
 
 /* What floats over the matrix is a pane of glass: it blurs what passes behind
@@ -212,9 +229,15 @@ html[data-tone="dark"] .site-nav a:is(:hover, :focus-visible) {
   background: rgb(255 255 255 / 0.12);
 }
 
-@media (max-width: 26rem) {
+@media (max-width: 30rem) {
+  /* The square alone: the name would crowd the links. */
+  .site-mark {
+    gap: 0;
+    font-size: 0;
+  }
+
   .site-nav a {
-    padding-inline: 0.7rem;
+    padding-inline: 0.8rem;
   }
 }
 
@@ -377,7 +400,7 @@ html[data-stage="off"] .hero-portrait-fallback {
   }
 
   .hero-main {
-    top: clamp(4.75rem, 11svh, 7rem);
+    top: clamp(5.75rem, 12svh, 7.5rem);
     transform: none;
   }
 
@@ -533,6 +556,14 @@ html[data-stage="off"] .hero-portrait-fallback {
   opacity: 0.75;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  /* The names come in one after another as the hero steps back. */
+  .work-sticky[data-shown] .work-list :is(h2, li) {
+    animation: rise-in 700ms var(--ease) both;
+    animation-delay: calc(60ms + var(--i, -1) * 45ms);
+  }
+}
+
 .work-notice {
   margin: 1.5rem 0 0;
   color: var(--ink-faint);
@@ -662,6 +693,46 @@ html:not([data-stage="on"]) .contact {
 
 .contact-title span:last-child {
   color: #ff9a55;
+}
+
+/* The invitation arrives once night has fallen: the question, then each way
+   to answer it, one after another. */
+@media (prefers-reduced-motion: no-preference) {
+  .contact-content[data-armed] > *,
+  .contact-content[data-armed] .contact-way,
+  .contact-content[data-armed] .contact-profiles > * {
+    opacity: 0;
+  }
+
+  .contact-content[data-shown] > :not(.contact-ways, .contact-profiles),
+  .contact-content[data-shown] .contact-way,
+  .contact-content[data-shown] .contact-profiles > * {
+    animation: rise-in 900ms var(--ease) both;
+  }
+
+  .contact-content[data-shown] > :is(.contact-ways, .contact-profiles) {
+    opacity: 1;
+  }
+
+  .contact-content[data-shown] .contact-way:nth-child(1) {
+    animation-delay: 260ms;
+  }
+
+  .contact-content[data-shown] .contact-way:nth-child(2) {
+    animation-delay: 380ms;
+  }
+
+  .contact-content[data-shown] .contact-profiles > :nth-child(1) {
+    animation-delay: 520ms;
+  }
+
+  .contact-content[data-shown] .contact-profiles > :nth-child(2) {
+    animation-delay: 620ms;
+  }
+
+  .contact-content[data-shown] .contact-footer {
+    animation-delay: 800ms;
+  }
 }
 
 /* Each way to answer is an object to pick up, not a row of a table. */

@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Copy, Mail, Phone } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GitHubIcon, LinkedInIcon } from "@/components/social-icons";
 import { contact, outro } from "@/lib/site-content";
 
@@ -37,6 +37,28 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 // else the section carries its own.
 export function Contact() {
   const { email, phone, linkedin, github } = contact;
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // The content waits, unseen, until the section has risen into view.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    content.dataset.armed = "";
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        content.dataset.shown = "";
+        observer.disconnect();
+      },
+      { threshold: 0.4 },
+    );
+    observer.observe(content);
+    return () => {
+      observer.disconnect();
+      delete content.dataset.armed;
+      delete content.dataset.shown;
+    };
+  }, []);
 
   return (
     <footer
@@ -45,7 +67,7 @@ export function Contact() {
       aria-labelledby="contact-heading"
       data-nav-stops="0.42"
     >
-      <div className="contact-content" data-calm>
+      <div ref={contentRef} className="contact-content" data-calm>
         <h2 id="contact-heading" className="contact-title">
           <span>{outro.title[0]}</span> <span>{outro.title[1]}</span>
         </h2>

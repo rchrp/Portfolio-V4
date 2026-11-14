@@ -177,6 +177,14 @@ export class Carousel {
         };
       }
 
+      // On a narrow screen the hero's card keeps the screen's own shape:
+      // cropped to a cover's, it would lose the name or the face.
+      if (index === 0 && sideways) {
+        card.height = layout.height * 1.7;
+        card.width = (card.height * width) / height;
+        card.x = layout.x + offset * (layout.width * 0.53 + card.width * 0.53);
+      }
+
       // The hero: from the whole screen to its card.
       if (index === 0 && this.position < 1) {
         const zoom = easeInOutCubic(clamp01(this.position / HERO_ZOOM));

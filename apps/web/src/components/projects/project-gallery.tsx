@@ -231,7 +231,7 @@ export function ProjectGallery({
           />
         ))}
       </div>
-      <div className="gallery-foot">
+      <div className="gallery-foot" data-calm>
         <p className="gallery-caption" key={index} aria-live="polite">
           {current.caption ?? current.alt}
         </p>

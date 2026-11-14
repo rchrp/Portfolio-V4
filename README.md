@@ -47,27 +47,36 @@ pnpm admin:invite   # one-time link to enroll an admin passkey
 
 ## Home page
 
-The home page is one scroll: who I am, a statement, the projects, and how to reach me. Its copy lives in `apps/web/src/lib/site-content.ts`.
+The home page is one scroll: who I am, the projects, and how to reach me. Its copy lives in `apps/web/src/lib/site-content.ts`.
 
-Behind everything, one canvas stays fixed to the screen: **the stage** (`apps/web/src/stage/`, mounted by `src/components/stage/stage.tsx`). It owns a single WebGL2 context and a single animation loop, and draws three things into the same picture:
+Behind everything, one canvas stays fixed to the screen: **the stage** (`apps/web/src/stage/`, mounted by `src/components/stage/stage.tsx`). It owns a single WebGL2 context and a single animation loop.
 
-- **The pixel matrix** — a grid of square cells covering the viewport (5 to 7 px apart, denser than the eye can count). `cells.ts` holds one record per cell (a level from resting dot to full square, and a colour) and packs it into a texture: one texel per cell. `matrix-layer.ts` draws the whole grid with one fragment shader, which also computes the resting dots, their slow breathing and the pointer's light. An idle matrix costs one texture read per pixel and nothing on the CPU.
-- **What lives in it** — figures are not sprites laid over the grid. `world.ts` runs small simulations (fixed 60 Hz steps) whose shapes are *sampled by the cells*: a butterfly is an implicit shape tested at each cell's centre plus four taps, so a cell half covered grows half way. The grid itself is what moves. Layers live in `stage/layers/`: `grass.ts` (a meadow, wind, the pointer brushing through), `butterflies.ts`, `koi.ts` (a chain of joints, rasterised from distances to its spine), `birds.ts` (a murmuration), `fireflies.ts`. Cells grow fast and fade slowly, which leaves a pale wake behind anything that passes.
-- **The portrait** — `portrait-layer.ts` samples the photograph once per cell and turns each sample into a square sitting exactly on its cell, sized by how dark the picture is there (a halftone) and coloured like it. Unlike grid cells, these squares can leave their place: the pointer sweeps them along its path, they glide, and a spring brings each one home. They condense out of the resting dots when the page opens and melt back into them as the hero scrolls away.
-- **Pictures** — `cards-layer.ts` draws project covers and screenshots as planes that can bend around an axis and dissolve into matrix-sized cells: out of focus, a picture is a mosaic that sharpens as it comes to the middle.
+### What the stage draws
 
-The page tells the stage what to show through **directors**: callbacks run at the start of each frame that read where the page is scrolled (`src/components/home-director.tsx`). A **mood** (`stage/moods.ts`: paper, resting dots, light, figure colours) and a **scene** (`stage/scenes.ts`: which layers are alive) are eased from one section to the next, so nothing cuts:
+- **The pixel matrix** — a grid of square cells covering the viewport (5 to 7 px apart). `cells.ts` holds one record per cell (a level from resting dot to full square, and a colour) and packs it into a texture: one texel per cell. `matrix-layer.ts` draws the whole grid with one fragment shader, which also computes the resting dots, their slow breathing, the pointer's light and the rings that run through the dots (`pulse`). An idle matrix costs one texture read per pixel and nothing on the CPU.
+- **What lives in it** — figures are not sprites laid over the grid. `world.ts` runs small simulations (fixed 60 Hz steps) whose shapes are *sampled by the cells*: a hummingbird is an implicit shape tested at each cell's centre plus four taps, so a cell half covered grows half way. Layers live in `stage/layers/`: `grass.ts` (a meadow, wind, the pointer brushing through), `hummingbirds.ts`, `koi.ts` (a chain of joints, rasterised from distances to its spine), `birds.ts` (a murmuration), `fireflies.ts`, and `name-relief.ts` (a word standing in relief, its sides thrown away from the pointer's light). Cells grow fast and fade slowly, which leaves a pale wake behind anything that passes.
+- **The portrait** — `portrait-layer.ts`. At rest it is the photograph itself. The photograph is also sampled once per cell, and each sample is a square that can take over from the patch of picture it stands for: under the pointer the picture gives way to its squares, which are swept along the pointer's path, glide, and are brought home by a spring. The same squares tell how the portrait arrives: they condense out of the resting dots, then sharpen into the photograph.
+- **Pictures** — `cards-layer.ts` draws project covers, screenshots and the hero's own card as planes placed on a roller or bent around an axis. A picture resolves out of matrix-sized cells while it loads in.
 
-1. **Hero** — warm paper, a meadow at golden hour, a few butterflies, and the portrait in the matrix. The name, one sentence and two actions are plain HTML over it.
-2. **About** — the statement is inked in word by word as it is read; the matrix steps back to quiet dots.
-3. **Projects** — a carousel (`stage/carousel.ts`, `src/components/projects/`): covers wrapped over a wide drum, slightly askew, turned by the scroll, which settles on one project at a time (`lenis/snap`). Only the project in focus shows its name, category and summary. On narrow screens the covers travel sideways instead, clear of the text. Opening a project (`?projet=<slug>`, so links and the back button work) flattens its cover into the project's page: facts, story, figures, and screenshots on a strip wrapped around a cylinder. The matrix takes the project's colour and a world of its own (`src/lib/project-worlds.ts`).
-4. **Contact** — the sky turns to sunset, then to night: the same meadow, lit by fireflies.
+There are two matrices (`matrix-scene.ts`): the **hero's** (`hero-scene.ts`: meadow, hummingbirds, the first name in relief, the portrait) and the **backdrop** behind the rest of the page. The hero is drawn straight to the screen while it fills it, and into a picture of its own once it starts leaving, so that it can become a card.
 
-Text always wins over the matrix: blocks marked `data-calm` are passed to the grid shader, which fades figures and the pointer's light behind them.
+### The story the page tells
+
+The page tells the stage what to show through **directors**: callbacks run at the start of each frame that read where the page is scrolled (`src/components/home-director.tsx`, `src/components/projects/projects.tsx`). A **mood** (`stage/moods.ts`: paper, resting dots, light, figure colours) and a **scene** (which layers are alive) are eased from one section to the next, so nothing cuts.
+
+1. **Arrival** — the page opens on bare dots. A ring runs through them from where the face will be; the first name rises out of the grid letter by letter, the portrait condenses from pixels then sharpens into the photograph, the meadow grows, the hummingbirds fly in. The words come last.
+2. **Hero** — the first name, a sentence and two actions, over a meadow at golden hour. The pointer is a light: it turns the name's relief and lifts the dots around it, and it brushes the portrait apart.
+3. **From one to many** — scrolling, the whole hero draws back, shrinks to a card and turns away on a roller as the first project comes round (`stage/carousel.ts`): the person becomes the first card of the work.
+4. **Projects** — a roller standing upright, turned by the scroll, which settles on one project at a time (`lenis/snap`). The cover in focus faces the reader; its neighbours have turned away and wrap around the roller. Beside it, only the list of names, the one in focus inked in. On narrow screens the covers travel along a row instead, clear of the list.
+5. **A project** — clicking the cover or its name (`?projet=<slug>`, so links and the back button work) sends a ring through the matrix, brings the cover forward and flattens it into the project's page: facts, story, figures, screenshots on a strip wrapped around a cylinder. The matrix takes the project's colour and a world of its own (`src/lib/project-worlds.ts`).
+6. **Contact** — the sky turns to sunset, then to night: the hero's meadow again, lit by fireflies. The invitation arrives once it is dark, one way to answer after another.
+7. **Elsewhere** — leaving for `/parcours`, the page sinks into the dark that page opens on.
+
+Text always wins over the matrix: blocks marked `data-calm` are passed to the grid shader, which fades figures and the pointer's light behind them. Controls that float over the matrix are panes of glass (`.glass`, refracting in Chromium through `GlassFilter`); each screen keeps one solid button.
 
 ### Without WebGL, or with reduced motion
 
-- `data-stage` on the root element says whether the stage runs. When it cannot (`off`), sections bring back plain backgrounds, the portrait is the photograph, the carousel shows the cover in focus as an image and screenshots scroll sideways.
+- `data-stage` on the root element says whether the stage runs. When it cannot (`off`), sections bring back plain backgrounds, the name is a heading and the portrait a picture, the list of projects follows the scroll and shows the cover in focus as an image, and screenshots scroll sideways.
 - With `prefers-reduced-motion`, the stage draws stills: scenes are simulated ahead for a few seconds, then a frame is drawn only when something changes (scroll, resize, a project opening). Smooth scrolling and CSS animations are off.
 - The loop pauses with the tab, drops to every other frame when only the resting dots breathe, and lowers its resolution if frames keep coming in late.
 

@@ -23,7 +23,7 @@ const entryId = z.string().min(1).max(64);
 
 function refresh() {
   revalidatePath("/admin", "layout");
-  revalidatePath("/parcours");
+  revalidatePath("/");
 }
 
 export async function saveJourneyAction(

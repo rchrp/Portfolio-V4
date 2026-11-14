@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { Contact } from "@/components/contact";
 import { Hero } from "@/components/hero";
 import { HomeDirector } from "@/components/home-director";
+import { JourneySection } from "@/components/journey/journey-section";
 import { KeyboardNavigation } from "@/components/keyboard-navigation";
 import { ProjectsSection } from "@/components/projects/projects-section";
 import { SiteHeader } from "@/components/site-header";
@@ -15,8 +16,8 @@ export default function Home() {
       <Stage />
       <SiteHeader />
       <main className="site">
-        {/* One story, held on screen while the page scrolls: the hero, which
-            draws back into a card, then the projects it joins. */}
+        {/* One story, held on screen while the page scrolls: the hero, then
+            the projects that cover it. */}
         <section
           id="accueil"
           className="story"
@@ -29,6 +30,9 @@ export default function Home() {
             <ProjectsSection />
           </Suspense>
         </section>
+        <Suspense fallback={null}>
+          <JourneySection />
+        </Suspense>
         <Contact />
       </main>
       <HomeDirector />

@@ -31,6 +31,7 @@ export class MatrixScene {
       width: 1,
       height: 1,
       time: 0,
+      still: false,
       palette,
       pointer,
     };
@@ -66,6 +67,7 @@ export class MatrixScene {
     frame.palette = palette;
     frame.pointer = pointer;
     frame.time = time;
+    frame.still = still;
     grid.wake = palette.pale;
     grid.begin();
     world.update(frame, dt, still);

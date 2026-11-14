@@ -1,3 +1,4 @@
+import type { ReliefRect } from "./layers/name-relief";
 import type { Mood } from "./moods";
 import type { Scene } from "./world";
 
@@ -12,5 +13,13 @@ export const direction = {
     position: 0,
     /** How far the open project's cover has come forward, 0 to 1. */
     opened: 0,
+  },
+  /** The journey: the year in focus, and where it stands in the matrix. */
+  journey: {
+    year: "",
+    /** How much of the section is left to see, 0 to 1. */
+    shown: 1,
+    /** In viewport pixels; null while the section is off screen. */
+    rect: null as ReliefRect | null,
   },
 };

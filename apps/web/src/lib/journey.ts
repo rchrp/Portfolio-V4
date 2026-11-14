@@ -77,13 +77,3 @@ export const isOngoing = (
   { startedOn, endedOn }: Pick<JourneyEntry, "startedOn" | "endedOn">,
   now = currentMonth(),
 ) => startedOn <= now && (!endedOn || endedOn >= now);
-
-/** Years covered by the whole journey, e.g. "2017 — 2027". */
-export function journeySpan(entries: JourneyEntry[]): string | null {
-  if (!entries.length) return null;
-  const first = entries[0].startedOn.slice(0, 4);
-  const last = entries
-    .map((entry) => (entry.endedOn ?? currentMonth()).slice(0, 4))
-    .reduce((latest, year) => (year > latest ? year : latest));
-  return first === last ? first : `${first} — ${last}`;
-}

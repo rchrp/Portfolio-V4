@@ -43,23 +43,6 @@
   }
 }
 
-/* Leaving for another page: the home page sinks into the dark the next one
-   opens on. */
-html[data-leaving] {
-  background: #0c0b09;
-  transition: background-color 420ms ease;
-}
-
-html[data-leaving] body {
-  background: transparent;
-}
-
-html[data-leaving] :is(.site, .site-header, .stage) {
-  opacity: 0;
-  transition: opacity 380ms ease;
-  animation: none;
-}
-
 /* -- Glass ----------------------------------------------------------------- */
 
 /* What floats over the matrix is a pane of glass. The stage draws what the
@@ -643,6 +626,256 @@ html[data-stage="off"] .work-cover img {
   }
 
   .work-list button[aria-current] {
+    transform: none;
+  }
+}
+
+/* -- Journey --------------------------------------------------------------- */
+
+/* A year at a time: the years in a column, the one in focus drawn large in
+   the matrix by the stage, and what began that year on a pane of glass. */
+.journey {
+  /* Room below for the section to go before night falls on the next one. */
+  --journey-dusk: 40svh;
+  position: relative;
+  display: grid;
+  /* From the top: the years must not move when a year has less to say. */
+  align-content: start;
+  min-height: calc(100svh + var(--journey-dusk));
+  padding: clamp(5.5rem, 15svh, 10rem) var(--page-gutter)
+    calc(clamp(3rem, 9svh, 7rem) + var(--journey-dusk));
+}
+
+/* Without the stage, the next section brings its own dusk. */
+html:not([data-stage="on"]) .journey {
+  --journey-dusk: 0svh;
+}
+
+.journey-content {
+  display: grid;
+  grid-template-areas:
+    "title year"
+    "years card";
+  grid-template-columns: minmax(7rem, 13rem) minmax(0, 46rem);
+  align-items: end;
+  gap: clamp(3.25rem, 8svh, 4.5rem) clamp(2rem, 9vw, 9rem);
+}
+
+.journey-title {
+  grid-area: title;
+  margin: 0;
+  font-size: clamp(1.35rem, 1.9vw, 1.75rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+/* Where the stage sets the year: an empty box of four figures' shape. */
+.journey-year {
+  container-type: inline-size;
+  grid-area: year;
+  width: min(100%, 30rem);
+  aspect-ratio: 3.1 / 1;
+}
+
+.journey-year span {
+  display: none;
+  color: var(--ink);
+  font-size: 42cqw;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 0.76;
+}
+
+html[data-stage="off"] .journey-year span {
+  display: block;
+}
+
+.journey-years {
+  position: relative;
+  display: grid;
+  grid-area: years;
+  align-self: start;
+  justify-items: start;
+}
+
+.journey-years button {
+  position: relative;
+  padding: 0.3rem 0;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font: inherit;
+  font-size: clamp(1.05rem, 1.3vw, 1.2rem);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition:
+    color 320ms ease,
+    transform 420ms var(--ease);
+}
+
+.journey-years button:is(:hover, :focus-visible) {
+  color: var(--ink-soft);
+}
+
+.journey-years button[aria-selected="true"] {
+  color: var(--ink);
+  transform: translateX(0.9rem);
+}
+
+/* The same square of the matrix that marks the project in focus. */
+.journey-years button::before {
+  position: absolute;
+  top: 50%;
+  left: -0.9rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 1px;
+  content: "";
+  background: var(--accent);
+  opacity: 0;
+  transform: translateY(-50%) scale(0.2);
+  transition:
+    opacity 320ms ease,
+    transform 420ms var(--ease);
+}
+
+.journey-years button[aria-selected="true"]::before {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.journey-card {
+  grid-area: card;
+  align-self: start;
+  min-height: 15rem;
+  padding: clamp(1.5rem, 2.8vw, 2.4rem);
+  border-radius: 1.5rem;
+}
+
+.journey-steps {
+  display: grid;
+  gap: clamp(1.75rem, 4svh, 2.5rem);
+}
+
+.journey-step > * {
+  margin: 0;
+}
+
+.journey-step-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.75rem;
+  color: var(--brown);
+  font-size: 0.925rem;
+  font-weight: 500;
+}
+
+/* Still going on: a lit square, and the word. */
+.journey-step-now {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--ink-soft);
+}
+
+.journey-step-now::before {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 1px;
+  content: "";
+  background: var(--accent);
+}
+
+.journey-step h3 {
+  margin-top: 0.55rem;
+  font-size: clamp(1.3rem, 2vw, 1.7rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.journey-step-where {
+  margin-top: 0.3rem;
+  color: var(--ink-soft);
+}
+
+.journey-step-summary {
+  max-width: 38rem;
+  margin-top: 0.9rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.journey-step-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin-top: 0.9rem;
+}
+
+.journey-step-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 0.3em;
+  transition: text-decoration-color 260ms ease;
+}
+
+.journey-step-links a:is(:hover, :focus-visible) {
+  text-decoration-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A year's steps come in one after another. */
+  .journey-step {
+    animation: rise-in 600ms var(--ease) both;
+  }
+
+  .journey-step:nth-child(2) {
+    animation-delay: 90ms;
+  }
+
+  .journey-step:nth-child(n + 3) {
+    animation-delay: 180ms;
+  }
+}
+
+@media (max-width: 51.99rem) {
+  .journey-content {
+    grid-template-areas:
+      "title"
+      "year"
+      "years"
+      "card";
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+
+  .journey-year {
+    width: min(100%, 21rem);
+    /* Clear of the words around it, which the matrix dims near. */
+    margin: 0.75rem 0 1.5rem;
+  }
+
+  /* The years in a row, which scrolls if they are many. */
+  .journey-years {
+    display: flex;
+    gap: 0.25rem 1.4rem;
+    margin: 0 calc(-1 * var(--page-gutter));
+    padding: 0 var(--page-gutter) 0 calc(var(--page-gutter) + 0.9rem);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .journey-years button[aria-selected="true"] {
     transform: none;
   }
 }

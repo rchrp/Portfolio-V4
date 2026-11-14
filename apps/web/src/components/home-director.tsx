@@ -5,14 +5,15 @@ import { useStage } from "@/components/stage/stage";
 import { direction } from "@/stage/direction";
 import { smoothstep } from "@/stage/math";
 import { nightMood, quietMood, sunsetMood } from "@/stage/moods";
-import { duskScene } from "@/stage/scenes";
+import { duskScene, journeyScene } from "@/stage/scenes";
 
 const PORTRAIT = "/portrait.webp";
 
 // Translates where the page is into what the stage shows: the hero filling
 // the screen at the top, then covered block by block as the carousel comes
 // in; a quiet matrix behind the projects; a project's own world while one is
-// open; sunset, then the meadow by night, at the contact section.
+// open; the year in focus while the journey is on screen; sunset, then the
+// meadow by night, at the contact section.
 export function HomeDirector() {
   const stage = useStage();
 
@@ -105,10 +106,16 @@ export function HomeDirector() {
         } else {
           engine.setMoodMix(sunsetMood, nightMood, (night - 0.45) / 0.55);
         }
-        engine.setScene(night > 0.3 ? duskScene : null);
+        engine.setScene(
+          night > 0.3
+            ? duskScene
+            : direction.journey.rect
+              ? journeyScene
+              : null,
+        );
       } else {
         engine.setMood(quietMood);
-        engine.setScene(null);
+        engine.setScene(direction.journey.rect ? journeyScene : null);
       }
 
       // Fixed chrome reads the tone of what lies behind it.

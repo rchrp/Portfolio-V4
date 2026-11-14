@@ -2,7 +2,7 @@ import type { CellGrid } from "./cells";
 import { damp, type RGB } from "./math";
 
 // What lives in the matrix: a scene is a handful of layers (a meadow, a few
-// butterflies, a pond of koi…) simulated in viewport pixels and drawn into
+// hummingbirds, a pond of koi…) simulated in viewport pixels and drawn into
 // the cells. Changing scene never cuts: the layers of the old one shrink back
 // into the grid while those of the new one grow out of it.
 
@@ -36,6 +36,8 @@ export type WorldFrame = {
   height: number;
   /** Seconds since the stage started. */
   time: number;
+  /** Reduced motion: nothing animates, everything shows settled. */
+  still: boolean;
   palette: Palette;
   pointer: WorldPointer;
 };

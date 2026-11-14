@@ -47,14 +47,14 @@ pnpm admin:invite   # one-time link to enroll an admin passkey
 
 ## Home page
 
-The home page is one scroll: who I am, the projects, and how to reach me. Its copy lives in `apps/web/src/lib/site-content.ts`.
+The home page is one scroll: who I am, the projects, the journey, and how to reach me. Its copy lives in `apps/web/src/lib/site-content.ts`.
 
 Behind everything, one canvas stays fixed to the screen: **the stage** (`apps/web/src/stage/`, mounted by `src/components/stage/stage.tsx`). It owns a single WebGL2 context and a single animation loop.
 
 ### What the stage draws
 
 - **The pixel matrix** — a grid of square cells covering the viewport (5 to 7 px apart). `cells.ts` holds one record per cell (a level from resting dot to full square, and a colour) and packs it into a texture: one texel per cell. `matrix-layer.ts` draws the whole grid with one fragment shader, which also computes the resting dots, their slow breathing, the pointer's light and the rings that run through the dots (`pulse`). An idle matrix costs one texture read per pixel and nothing on the CPU.
-- **What lives in it** — figures are not sprites laid over the grid. `world.ts` runs small simulations (fixed 60 Hz steps) whose shapes are *sampled by the cells*: a hummingbird is an implicit shape tested at each cell's centre plus four taps, so a cell half covered grows half way. Layers live in `stage/layers/`: `grass.ts` (a meadow, wind, the pointer brushing through), `hummingbirds.ts`, `koi.ts` (a chain of joints, rasterised from distances to its spine), `birds.ts` (a murmuration), `fireflies.ts`, and `name-relief.ts` (the sides of a word standing in relief, thrown away from the pointer's light; its face is plain type set over them by `name-face.ts`). Cells grow fast and fade slowly, which leaves a pale wake behind anything that passes.
+- **What lives in it** — figures are not sprites laid over the grid. `world.ts` runs small simulations (fixed 60 Hz steps) whose shapes are _sampled by the cells_: a hummingbird is an implicit shape tested at each cell's centre plus four taps, so a cell half covered grows half way. Layers live in `stage/layers/`: `grass.ts` (a meadow, wind, the pointer brushing through), `hummingbirds.ts`, `koi.ts` (a chain of joints, rasterised from distances to its spine), `birds.ts` (a murmuration), `fireflies.ts`, and `name-relief.ts` (the sides of a word standing in relief, thrown away from the pointer's light; its face is plain type set over them by `name-face.ts`). Cells grow fast and fade slowly, which leaves a pale wake behind anything that passes.
 - **The portrait** — `portrait-layer.ts`. At rest it is the photograph itself. The photograph is also sampled once per cell, and each sample is a square that can take over from the patch of picture it stands for: under the pointer the picture gives way to its squares, which are swept along the pointer's path, glide, and are brought home by a spring. The same squares tell how the portrait arrives: they condense out of the resting dots, then sharpen into the photograph.
 - **Pictures** — `cards-layer.ts` draws project covers and screenshots as planes, either placed in space and seen through a lens (the carousel) or bent around an axis (a strip of screenshots). A picture resolves out of matrix-sized cells while it loads in.
 - **Glass** — `glass-layer.ts`, last: see below.
@@ -70,8 +70,8 @@ The page tells the stage what to show through **directors**: callbacks run at th
 3. **From one to many** — scrolling, the hero stays where it is and is covered square by square, its words first, while the first cover comes up from the bottom right.
 4. **Projects** — a spiral staircase of covers (`stage/carousel.ts`): flat planes on a helix, each 15° further round and a step lower than the one before, turned and raised by the scroll, which settles on one project at a time (`lenis/snap`). The cover in focus stands straight in front of the reader, the next waits below to its right, the last leaves above to its left; a very wide camera and a lens that swells the middle of the picture give them their lean. The geometry is that of [Dominik Fojcik's portfolio](https://www.fojcikdominik.com/), measured from its source. Beside it, only the list of names, the one in focus inked in. On narrow screens the covers travel along a row instead, clear of the list.
 5. **A project** — clicking the cover or its name (`?projet=<slug>`, so links and the back button work) sends a ring through the matrix, brings the cover forward and flattens it into the project's page: facts, story, figures, screenshots on a strip wrapped around a cylinder. The matrix takes the project's colour and a world of its own (`src/lib/project-worlds.ts`).
-6. **Contact** — the sky turns to sunset, then to night: the hero's meadow again, lit by fireflies. The invitation arrives once it is dark, one way to answer after another.
-7. **Elsewhere** — leaving for `/parcours`, the page sinks into the dark that page opens on.
+6. **Journey** — a year at a time (`src/components/journey/`). The years stand in a column; the one in focus is drawn by the stage, large, in relief in the matrix (the layer that draws the first name's sides, here with its faces in cells too), and a pane of glass tells what began that year. The steps live in the `JourneyEntry` table, are edited from the admin panel (**Parcours**) and are grouped by the year they start in; a step links the published projects made during it, which open in their page (`/?projet=<slug>`).
+7. **Contact** — the journey fades as it leaves, then the sky turns to sunset and to night: the hero's meadow again, lit by fireflies. The invitation arrives once it is dark, one way to answer after another.
 
 Text always wins over the matrix: blocks marked `data-calm` are passed to the grid shader, which fades figures and the pointer's light behind them. Controls that float over the matrix are panes of liquid glass (`.glass`); each screen keeps one solid button. The stage draws the glass itself (`stage/glass-layer.ts`): under each pane, the picture just drawn is copied and drawn back bent along the rim, softened, its colours slightly parted. `backdrop-filter` would do part of this, but over a canvas that changes every frame it cost one frame in six here; in the stage it is one small copy and one quad per pane, in every browser.
 
@@ -84,20 +84,6 @@ Text always wins over the matrix: blocks marked `data-calm` are passed to the gr
 ### Pixel-matrix edge maps
 
 The admin panel still computes an edge map for each uploaded logo or cover (`<name>.edges.png`), and `pnpm --filter web edges` does the same for local images. The home page no longer draws them: the matrix now shows pictures in full colour rather than their outlines.
-
-## Journey page
-
-`/parcours` tells the journey (studies, jobs, freelance work, projects) as a corridor in the dark, walked as the page scrolls. Its steps live in the `JourneyEntry` table, are edited from the admin panel (**Parcours**) and are ordered by start date; its copy lives in `apps/web/src/lib/journey-content.ts`. A step can link the published projects made during it, which open in their page on the home page (`/?projet=<slug>`), and each one has an anchor (`/parcours#<slug>`).
-
-- **three.js** (`src/components/journey/journey-scene.ts`, loaded on demand) draws the world: a floor of square pixels fading into fog, the path (orange where it has been walked), a marker and a connector per step, floating dust, and a desk lamp that flickers on and lights the start of the path.
-- **The steps stay HTML**, so they remain crisp, selectable and accessible: the scene places them in the same 3D space with CSS transforms computed from its camera (the CSS3DRenderer technique). Depth of field is a CSS blur growing with the distance to the step being read; steps ahead wait in the haze, steps already read fly past, blurred.
-- Arrow keys and the side rail step through the journey. With reduced motion, without WebGL or without JavaScript, the steps read as a plain list.
-
-The lamp is a third-party model, adapted by `apps/web/scripts/build-lamp-model.mjs`: transforms baked, one unit tall with its base on the origin, attributes quantized (`KHR_mesh_quantization`, read by three.js without a decoder), textures resized and re-encoded as WebP (3.3 MB → 0.4 MB). Rebuild after changing it:
-
-```bash
-pnpm --filter web model:lamp
-```
 
 ## Project catalog
 
@@ -198,11 +184,6 @@ S3_PUBLIC_URL="https://images.example.com"                # public base URL of t
 
 Objects are written with a one-year immutable `Cache-Control` and saved in the project as `https://` URLs, which the admin CSP already allows (`img-src https:`). For the pixel matrix to read an edge map from another origin, the bucket must send CORS headers allowing `GET` from the site's origin.
 
-## Third-party assets and credits
+## License
 
-The source code of this repository is licensed under the [MIT License](LICENSE). The following assets are **not** covered by the MIT License and keep their own licenses:
-
-- **3D model** — ["Desk lamp"](https://sketchfab.com/3d-models/desk-lamp-b9458e04d30e4b6284d46d35880a9b95) by [HASSAN](https://sketchfab.com/7ASSAN), licensed under [Creative Commons Attribution 4.0](http://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).
-  - Files: `apps/web/assets/models/desk_lamp.glb` (original) and `apps/web/public/models/desk-lamp.glb` (adapted).
-  - Changes: transforms baked, rescaled, attributes quantized, textures resized and converted to WebP.
-  - The /parcours page credits the author below the timeline.
+The source code of this repository is licensed under the [MIT License](LICENSE).

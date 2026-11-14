@@ -25,7 +25,7 @@ export default async function JourneyPage() {
         </div>
         <div className="adm-row">
           <a
-            href="/parcours"
+            href="/#parcours"
             className="adm-button adm-hide-sm"
             target="_blank"
             rel="noopener noreferrer"

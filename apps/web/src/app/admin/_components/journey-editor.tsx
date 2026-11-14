@@ -221,7 +221,7 @@ export function JourneyEditor({
             <Field
               label="Slug"
               error={error("slug")}
-              hint="Ancre de l’étape : /parcours#slug."
+              hint="Identifiant de l’étape, unique."
             >
               {(props) => (
                 <div className="adm-prefixed">

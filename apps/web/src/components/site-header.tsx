@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { MouseEvent } from "react";
 import { useEffect } from "react";
 import { restingPoints } from "@/components/keyboard-navigation";
@@ -26,26 +24,6 @@ function jump(event: MouseEvent<HTMLAnchorElement>, id: string) {
 // The page's only fixed chrome: the name, and three destinations on a pane
 // of glass.
 export function SiteHeader() {
-  const router = useRouter();
-
-  // Another page: the home page fades into the dark first, then goes.
-  const leave = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    event.preventDefault();
-    document.documentElement.dataset.leaving = "";
-    window.setTimeout(() => router.push(href), 400);
-  };
-
-  useEffect(
-    () => () => {
-      delete document.documentElement.dataset.leaving;
-    },
-    [],
-  );
-
   // Without the stage, the contact section darkens by itself: the header
   // turns light once over it. With it, the stage's director sets the tone.
   useEffect(() => {
@@ -84,9 +62,9 @@ export function SiteHeader() {
         <a href="#projets" onClick={(event) => jump(event, "projets")}>
           Projets
         </a>
-        <Link href="/parcours" onClick={(event) => leave(event, "/parcours")}>
+        <a href="#parcours" onClick={(event) => jump(event, "parcours")}>
           Parcours
-        </Link>
+        </a>
         <a href="#contact" onClick={(event) => jump(event, "contact")}>
           Contact
         </a>

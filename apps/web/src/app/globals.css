@@ -20,8 +20,6 @@
   --page-gutter: clamp(1.25rem, 4.2vw, 4.5rem);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  /* Read by the journey page. */
-  --hero-ease: var(--ease);
   --background: var(--paper);
   --foreground: var(--ink);
 }

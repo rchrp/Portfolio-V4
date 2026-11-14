@@ -45,7 +45,7 @@ export function Contact() {
       aria-labelledby="contact-heading"
       data-nav-stops="0.42"
     >
-      <div className="contact-content">
+      <div className="contact-content" data-calm>
         <h2 id="contact-heading" className="contact-title">
           <span>{outro.title[0]}</span> <span>{outro.title[1]}</span>
         </h2>

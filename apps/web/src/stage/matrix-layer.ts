@@ -14,8 +14,13 @@ import type { Mood } from "./moods";
 // pointer's light and the scene's halo are all computed here, so an idle
 // matrix costs one texture read per pixel and nothing on the CPU.
 
+/** Most boxes of text the shader keeps clear at once. */
+export const CALM_ZONES = 8;
+
 const fragment = /* glsl */ `#version 300 es
 precision highp float;
+
+#define CALM_ZONES ${CALM_ZONES}
 
 uniform sampler2D uCells;
 uniform ivec2 uGrid;
@@ -38,6 +43,9 @@ uniform vec3 uBloom;
 uniform float uBloomAmount;
 uniform vec4 uHalo;
 uniform vec3 uHaloColor;
+// Boxes of text (left, top, right, bottom): figures fade behind them.
+uniform vec4 uCalm[CALM_ZONES];
+uniform int uCalmCount;
 
 out vec4 fragColor;
 
@@ -73,12 +81,24 @@ void main() {
   float hidden = step(0.5, code) * step(code, 1.5);
   float level = clamp((code - 2.0) / 253.0, 0.0, 1.0);
 
+  // Behind text, whatever is drawn steps back to a murmur.
+  float calm = 0.0;
+  for (int index = 0; index < CALM_ZONES; index++) {
+    if (index >= uCalmCount) break;
+    vec4 zone = uCalm[index];
+    vec2 outside = max(zone.xy - center, center - zone.zw);
+    float distanceOut = length(max(outside, 0.0));
+    calm = max(calm, 1.0 - smoothstep(0.0, 48.0 * uPixelRatio, distanceOut));
+  }
+  level *= mix(1.0, 0.24, calm);
+
   // Resting dots: no two quite alike, slowly swelling and ebbing in waves.
   float grain = hash(cell);
   float wave = sin(cell.x * 0.085 + cell.y * 0.06 - uTime * 0.42 + grain * 1.2)
     * sin(cell.x * 0.031 - cell.y * 0.052 + uTime * 0.23);
   float restSize = uRestSize * (0.72 + 0.5 * grain) * (1.0 + uBreath * wave * 0.55);
   float restAlpha = uRestAlpha * (0.55 + 0.75 * grain) * (1.0 + uBreath * wave * 0.4);
+  restAlpha *= mix(1.0, 0.7, calm);
   restSize += glow * 0.3 + halo * 0.13;
   restAlpha = min(1.0, restAlpha + glow * 0.5 + halo * 0.2);
   vec3 restColor = mix(uRest, uHaloColor, min(1.0, halo * 0.9));
@@ -118,6 +138,8 @@ const uniformNames = [
   "uBloomAmount",
   "uHalo",
   "uHaloColor",
+  "uCalm",
+  "uCalmCount",
 ] as const;
 
 export type MatrixLight = {
@@ -195,6 +217,8 @@ export class MatrixLayer {
     halo: MatrixLight,
     time: number,
     pixelRatio: number,
+    calm: Float32Array,
+    calmCount: number,
   ) {
     const { gl } = this;
     const { uniforms } = this.program;
@@ -265,6 +289,8 @@ export class MatrixLayer {
       mood.halo[1] / 255,
       mood.halo[2] / 255,
     );
+    gl.uniform4fv(uniforms.uCalm, calm);
+    gl.uniform1i(uniforms.uCalmCount, calmCount);
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);

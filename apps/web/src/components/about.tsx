@@ -43,7 +43,7 @@ export function About() {
       data-nav-stops="0"
       style={{ "--n": words.length } as CSSProperties}
     >
-      <h2 id="about-heading" className="about-statement">
+      <h2 id="about-heading" className="about-statement" data-calm>
         <span className="sr-only">{manifesto.text.replaceAll("*", "")}</span>
         <span aria-hidden="true">
           {words.map(({ word, accent }, index) => (
@@ -58,7 +58,7 @@ export function About() {
           ))}
         </span>
       </h2>
-      <ul className="about-disciplines">
+      <ul className="about-disciplines" data-calm>
         {manifesto.disciplines.map(({ label, detail }) => (
           <li key={label}>
             <strong>{label}</strong>

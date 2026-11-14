@@ -1,6 +1,7 @@
+import { CardsLayer } from "./cards-layer";
 import { CellGrid } from "./cells";
 import type { GL } from "./gl";
-import { MatrixLayer, type MatrixLight } from "./matrix-layer";
+import { CALM_ZONES, MatrixLayer, type MatrixLight } from "./matrix-layer";
 import { clamp, damp, damping } from "./math";
 import { approachMood, cloneMood, quietMood, type Mood } from "./moods";
 import { PortraitLayer } from "./portrait-layer";
@@ -29,6 +30,8 @@ export class StageEngine {
   readonly grid = new CellGrid();
   readonly world = new World();
   readonly portrait: PortraitLayer;
+  /** Pictures drawn over the matrix: covers, screenshots. */
+  readonly cards: CardsLayer;
   private readonly matrix: MatrixLayer;
   private readonly layers: StageLayer[] = [];
   private readonly directors = new Set<Director>();
@@ -73,6 +76,12 @@ export class StageEngine {
   private gridMoving = false;
   private layersMoving = false;
   private skipped = false;
+  // Boxes of text the figures fade behind: elements marked `data-calm`.
+  private calmElements: HTMLElement[] = [];
+  private calmQueriedAt = -1;
+  private readonly calm = new Float32Array(CALM_ZONES * 4);
+  private calmCount = 0;
+  private awakeUntil = 0;
 
   // Adaptive resolution: measured over a window of frames.
   private maxPixelRatio = MAX_PIXEL_RATIO;
@@ -94,6 +103,7 @@ export class StageEngine {
     this.gl = gl;
     this.matrix = new MatrixLayer(gl);
     this.portrait = new PortraitLayer(gl);
+    this.cards = new CardsLayer(this);
 
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     this.still = this.reducedMotion.matches;
@@ -178,6 +188,11 @@ export class StageEngine {
     };
   }
 
+  /** Keeps the full frame rate for a moment: something is animating. */
+  wake(seconds = 0.4) {
+    this.awakeUntil = Math.max(this.awakeUntil, this.time + seconds);
+  }
+
   /** Asks for a frame: needed in still mode, harmless otherwise. */
   invalidate = () => {
     if (!this.still || this.pendingStill || this.disposed) return;
@@ -216,6 +231,7 @@ export class StageEngine {
       !this.world.active &&
       !this.portrait.busy &&
       this.moodSettled &&
+      this.time > this.awakeUntil &&
       this.time - this.pointerMovedAt > 1.2;
     if (calm && !this.skipped && elapsed < 30) {
       this.skipped = true;
@@ -250,6 +266,7 @@ export class StageEngine {
     const { gl } = this;
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
     this.matrix.upload(grid);
+    this.updateCalm();
     this.matrix.draw(
       grid,
       mood,
@@ -257,14 +274,47 @@ export class StageEngine {
       this.halo,
       this.time,
       this.pixelRatio,
+      this.calm,
+      this.calmCount,
     );
     portrait.draw(this.width, this.height, mood, this.light, this.pixelRatio);
-    let moving = false;
+    let moving = this.cards.draw(this, dt);
     for (const layer of this.layers) {
       if (layer.draw(this, dt)) moving = true;
     }
     this.layersMoving = moving;
   };
+
+  // Finds where the page's text currently sits, so the matrix can keep
+  // clear of it. The list of elements is refreshed twice a second.
+  private updateCalm() {
+    const now = performance.now();
+    if (now - this.calmQueriedAt > 500) {
+      this.calmQueriedAt = now;
+      this.calmElements = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-calm]"),
+      );
+    }
+    const { calm, pixelRatio } = this;
+    let count = 0;
+    for (const element of this.calmElements) {
+      if (count >= CALM_ZONES) break;
+      const bounds = element.getBoundingClientRect();
+      if (
+        bounds.width === 0 ||
+        bounds.bottom < -80 ||
+        bounds.top > this.height + 80
+      ) {
+        continue;
+      }
+      calm[count * 4] = bounds.left * pixelRatio;
+      calm[count * 4 + 1] = bounds.top * pixelRatio;
+      calm[count * 4 + 2] = bounds.right * pixelRatio;
+      calm[count * 4 + 3] = bounds.bottom * pixelRatio;
+      count += 1;
+    }
+    this.calmCount = count;
+  }
 
   private updatePointer(dt: number) {
     const { pointer, light } = this;
@@ -437,6 +487,7 @@ export class StageEngine {
     window.removeEventListener("scroll", this.invalidate);
     document.removeEventListener("visibilitychange", this.onVisibility);
     for (const layer of this.layers.splice(0)) layer.dispose();
+    this.cards.dispose();
     this.portrait.dispose();
     this.matrix.dispose();
     this.gl.getExtension("WEBGL_lose_context")?.loseContext();

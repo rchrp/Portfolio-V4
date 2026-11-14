@@ -14,7 +14,7 @@ export function Hero() {
       aria-label={`${hero.firstName} ${hero.lastName}, développeur freelance`}
       data-nav-stops="0"
     >
-      <div className="hero-copy">
+      <div className="hero-copy" data-calm>
         <p className="hero-role">Software engineer · Freelance</p>
         <h1 className="hero-name">
           <span>{hero.firstName}</span> <span>{hero.lastName}</span>

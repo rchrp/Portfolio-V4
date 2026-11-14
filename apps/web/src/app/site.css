@@ -524,3 +524,731 @@ html:not([data-stage="on"]) .contact {
     margin-bottom: -0.6rem;
   }
 }
+
+/* -- Projects: the carousel ------------------------------------------------ */
+
+.work {
+  position: relative;
+  /* One screen, plus the scroll that turns the carousel. */
+  height: calc(100svh + (var(--count) - 1) * var(--step) * 100svh);
+}
+
+.work-sticky {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: clip;
+}
+
+.work-head {
+  position: absolute;
+  top: clamp(5rem, 13svh, 7.5rem);
+  left: var(--page-gutter);
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.work-head h2,
+.work-head p {
+  margin: 0;
+  font: inherit;
+}
+
+.work-head h2 {
+  color: var(--ink);
+}
+
+.work-head p {
+  font-variant-numeric: tabular-nums;
+}
+
+.work-current {
+  display: inline-block;
+  color: var(--accent-deep);
+}
+
+.work-total {
+  color: var(--ink-faint);
+}
+
+/* What is needed to want to open the project, and nothing else. */
+.work-info {
+  position: absolute;
+  top: 50%;
+  left: var(--page-gutter);
+  width: min(
+    30rem,
+    calc(var(--card-x) - var(--card-width) / 2 - var(--page-gutter) - 3rem)
+  );
+  transform: translateY(-46%);
+}
+
+.work-kicker {
+  margin: 0 0 1.1rem;
+  color: var(--ink-soft);
+  font-size: 0.975rem;
+}
+
+.work-title {
+  margin: 0;
+  font-size: clamp(2.1rem, 4.2vw, 3.9rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  text-wrap: balance;
+}
+
+.work-summary {
+  max-width: 26rem;
+  margin: 1.4rem 0 0;
+  color: var(--ink-soft);
+  font-size: clamp(1rem, 1.2vw, 1.1rem);
+  line-height: 1.55;
+}
+
+.work-open {
+  margin-top: 2rem;
+}
+
+/* The cover in focus, as the page sees it: an invisible button exactly over
+   the picture the stage draws. */
+.work-cover {
+  position: absolute;
+  top: calc(var(--card-y) - var(--card-height) / 2);
+  left: calc(var(--card-x) - var(--card-width) / 2);
+  width: var(--card-width);
+  height: var(--card-height);
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  cursor: pointer;
+  rotate: -2deg;
+}
+
+.work-cover img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  opacity: 0;
+}
+
+html[data-stage="off"] .work-cover img {
+  opacity: 1;
+  box-shadow: 0 1.5rem 3rem rgb(43 27 17 / 0.16);
+}
+
+/* One square per project, down the right edge. */
+.work-pager {
+  position: absolute;
+  top: 50%;
+  right: calc(var(--page-gutter) * 0.55);
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transform: translateY(-50%);
+}
+
+.work-pager button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.work-pager button::before {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 1px;
+  content: "";
+  background: currentColor;
+  opacity: 0.22;
+  transition:
+    opacity 260ms ease,
+    transform 320ms var(--ease),
+    background-color 260ms ease;
+}
+
+.work-pager button:is(:hover, :focus-visible)::before {
+  opacity: 0.6;
+}
+
+.work-pager button[aria-current]::before {
+  background: var(--accent);
+  opacity: 1;
+  transform: scale(1.6);
+}
+
+/* The name appears beside the square it belongs to. */
+.work-pager span {
+  position: absolute;
+  right: 100%;
+  padding-right: 0.4rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(0.4rem);
+  transition:
+    opacity 240ms ease,
+    transform 320ms var(--ease);
+  pointer-events: none;
+}
+
+.work-pager button:is(:hover, :focus-visible) span {
+  opacity: 1;
+  transform: none;
+}
+
+.work-notice {
+  position: absolute;
+  bottom: 1.5rem;
+  left: var(--page-gutter);
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.875rem;
+}
+
+.work-loading,
+.work-empty {
+  display: grid;
+  place-items: center;
+  height: 100svh;
+  color: var(--ink-soft);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .work-info > * {
+    animation: rise-in 640ms var(--ease) both;
+  }
+
+  .work-info > :nth-child(2) {
+    animation-delay: 50ms;
+  }
+
+  .work-info > :nth-child(3) {
+    animation-delay: 110ms;
+  }
+
+  .work-info > :nth-child(4) {
+    animation-delay: 170ms;
+  }
+
+  .work-current {
+    animation: rise-in 420ms var(--ease) both;
+  }
+}
+
+@media (max-width: 51.99rem) {
+  .work-head {
+    top: 4.6rem;
+  }
+
+  .work-info {
+    top: calc(
+      var(--card-y) + var(--card-height) / 2 + clamp(1.5rem, 5svh, 3rem)
+    );
+    right: var(--page-gutter);
+    width: auto;
+    transform: none;
+  }
+
+  .work-kicker {
+    margin-bottom: 0.7rem;
+  }
+
+  .work-summary {
+    margin-top: 0.9rem;
+  }
+
+  .work-open {
+    margin-top: 1.3rem;
+  }
+
+  .work-pager {
+    right: 0.1rem;
+  }
+
+  .work-pager span {
+    display: none;
+  }
+}
+
+/* -- A project's page ------------------------------------------------------ */
+
+/* While a project is open, the home page steps out. */
+.site,
+.site-header {
+  transition: opacity 420ms ease;
+}
+
+html[data-detail="open"] :is(.site, .site-header) {
+  opacity: 0;
+}
+
+html[data-detail="open"] {
+  overflow: hidden;
+}
+
+.detail {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--ink);
+  outline: none;
+}
+
+html:not([data-stage="on"]) .detail {
+  background: var(--paper);
+}
+
+.detail-bar {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  padding: clamp(1.1rem, 2.2vw, 1.75rem) var(--page-gutter);
+  pointer-events: none;
+}
+
+.detail-back,
+.detail-return {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  padding: 0 1.1rem 0 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgb(246 240 231 / 0.78);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    border-color 240ms ease,
+    background-color 240ms ease,
+    color 240ms ease;
+}
+
+:is(.detail-back, .detail-return):is(:hover, :focus-visible) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.detail-page {
+  width: min(100% - 2 * var(--page-gutter), 76rem);
+  margin: 0 auto;
+  padding: clamp(1rem, 4svh, 3rem) 0 clamp(4rem, 12svh, 8rem);
+}
+
+.detail-intro {
+  max-width: 50rem;
+}
+
+.detail-kicker {
+  margin: 0 0 1.1rem;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.detail-title {
+  margin: 0;
+  font-size: clamp(2.6rem, 6.2vw, 5.5rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.detail-summary {
+  max-width: 38rem;
+  margin: 1.6rem 0 0;
+  color: var(--ink-soft);
+  font-size: clamp(1.1rem, 1.6vw, 1.4rem);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+/* The frame the stage brings the cover to. */
+.detail-cover {
+  aspect-ratio: 16 / 9;
+  margin: clamp(2.5rem, 7svh, 4.5rem) 0 0;
+  border-radius: 14px;
+}
+
+.detail-cover img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  opacity: 0;
+}
+
+html[data-stage="off"] .detail-cover img {
+  opacity: 1;
+}
+
+.detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+  gap: clamp(2rem, 6vw, 6rem);
+  margin-top: clamp(3.5rem, 10svh, 6.5rem);
+}
+
+.detail-facts {
+  display: grid;
+  align-content: start;
+  gap: 1.4rem;
+  margin: 0;
+}
+
+.detail-facts dt {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+}
+
+.detail-facts dd {
+  margin: 0.2rem 0 0;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.detail-story {
+  max-width: 44rem;
+}
+
+.detail-story > p {
+  margin: 0;
+  font-size: clamp(1.1rem, 1.5vw, 1.3rem);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.detail-highlights {
+  display: grid;
+  gap: 0.85rem;
+  margin: 2.4rem 0 0;
+  padding: 0;
+  color: var(--ink-soft);
+  list-style: none;
+}
+
+.detail-highlights li {
+  position: relative;
+  padding-left: 1.5rem;
+  line-height: 1.5;
+}
+
+.detail-highlights li::before {
+  position: absolute;
+  top: 0.55em;
+  left: 0.1rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 1px;
+  content: "";
+  background: var(--accent);
+}
+
+.detail-metrics {
+  display: flex;
+  width: fit-content;
+  min-width: min(100%, 28rem);
+  flex-wrap: wrap;
+  gap: clamp(2rem, 6vw, 5.5rem);
+  margin: clamp(3.5rem, 10svh, 6.5rem) 0 0;
+  padding: clamp(2rem, 5svh, 3rem) 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.detail-metrics li {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 15rem;
+}
+
+.detail-metrics strong {
+  font-size: clamp(2.2rem, 4.4vw, 3.6rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.detail-metrics span {
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.detail-close {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 2.5rem clamp(2rem, 6vw, 6rem);
+  margin-top: clamp(3.5rem, 10svh, 6.5rem);
+  padding-top: clamp(2rem, 5svh, 3rem);
+  border-top: 1px solid var(--line);
+}
+
+.detail-stack h3 {
+  margin: 0 0 0.6rem;
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.detail-stack p {
+  max-width: 36rem;
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+
+.detail-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  max-width: 26rem;
+}
+
+.detail-notice {
+  flex-basis: 100%;
+  margin: 0 0 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.button-outline {
+  border-color: var(--line);
+  background: rgb(246 240 231 / 0.6);
+}
+
+.button-outline:is(:hover, :focus-visible) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.detail-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-top: clamp(4rem, 12svh, 8rem);
+}
+
+.detail-next {
+  display: grid;
+  gap: 0.4rem;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.detail-next-label {
+  color: var(--ink-soft);
+}
+
+.detail-next-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+  font-size: clamp(1.9rem, 4.4vw, 3.6rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  transition: color 240ms ease;
+}
+
+.detail-next-title svg {
+  transition: transform 360ms var(--ease);
+}
+
+.detail-next:is(:hover, :focus-visible) .detail-next-title {
+  color: var(--accent-deep);
+}
+
+.detail-next:is(:hover, :focus-visible) svg {
+  transform: translateX(0.4rem);
+}
+
+/* Arriving: the cover lands first, the words follow. Leaving: the words go
+   first. */
+@media (prefers-reduced-motion: no-preference) {
+  .detail-bar,
+  .detail-intro > *,
+  .detail-page > :not(.detail-intro, .detail-cover) {
+    animation: rise-in 800ms var(--ease) 520ms both;
+  }
+
+  .detail-intro > :nth-child(1) {
+    animation-delay: 320ms;
+  }
+
+  .detail-intro > :nth-child(2) {
+    animation-delay: 380ms;
+  }
+
+  .detail-intro > :nth-child(3) {
+    animation-delay: 460ms;
+  }
+}
+
+.detail[data-leaving] > * {
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+
+.detail[data-leaving] {
+  pointer-events: none;
+}
+
+@media (max-width: 51.99rem) {
+  .detail-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-close {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-links {
+    justify-content: flex-start;
+  }
+}
+
+/* -- Screenshots ----------------------------------------------------------- */
+
+.gallery {
+  /* Wider than the page's column: the strip runs from edge to edge. */
+  width: 100vw;
+  margin: clamp(3.5rem, 10svh, 6.5rem) 0 0 calc(50% - 50vw);
+}
+
+.gallery-track {
+  position: relative;
+  height: clamp(13rem, 54svh, 36rem);
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.gallery-track:active {
+  cursor: grabbing;
+}
+
+.gallery-picture {
+  display: none;
+}
+
+/* Without the stage: a plain strip that scrolls sideways. */
+html:not([data-stage="on"]) .gallery-track {
+  display: flex;
+  gap: 1rem;
+  height: auto;
+  padding: 0 var(--page-gutter);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  cursor: auto;
+}
+
+html:not([data-stage="on"]) .gallery-picture {
+  display: block;
+  flex: 0 0 min(78vw, 56rem);
+  width: min(78vw, 56rem);
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  object-fit: cover;
+  scroll-snap-align: center;
+}
+
+.gallery-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  width: min(100% - 2 * var(--page-gutter), 76rem);
+  margin: 1.5rem auto 0;
+}
+
+.gallery-caption {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.gallery-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.gallery-controls button {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgb(246 240 231 / 0.6);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    border-color 240ms ease,
+    background-color 240ms ease,
+    color 240ms ease,
+    opacity 240ms ease;
+}
+
+.gallery-controls button:not(:disabled):is(:hover, :focus-visible) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.gallery-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gallery-caption {
+    animation: rise-in 420ms var(--ease) both;
+  }
+}

@@ -1,4 +1,5 @@
 import { CardsLayer } from "./cards-layer";
+import { GlassLayer } from "./glass-layer";
 import type { GL } from "./gl";
 import { HeroScene } from "./hero-scene";
 import { CALM_ZONES, type MatrixLight } from "./matrix-layer";
@@ -44,7 +45,11 @@ export class StageEngine {
   readonly hero: HeroScene;
   /** Pictures drawn over the matrix: covers, screenshots, the hero's card. */
   readonly cards: CardsLayer;
+  /** Liquid glass under the page's floating controls. */
+  private readonly glass: GlassLayer;
   heroMode: HeroMode = "full";
+  /** Whether the hero's card is drawn well under the hero's own size. */
+  heroSmall = false;
   private readonly layers: StageLayer[] = [];
   private readonly directors = new Set<Director>();
 
@@ -115,6 +120,7 @@ export class StageEngine {
     this.backdrop = new MatrixScene(gl, this.mood, this.pointer);
     this.hero = new HeroScene(gl, firstName);
     this.cards = new CardsLayer(this);
+    this.glass = new GlassLayer(gl);
 
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     this.still = this.reducedMotion.matches;
@@ -282,7 +288,9 @@ export class StageEngine {
       // Only a hero that fills the screen feels the pointer.
       hero.update(full ? this.pointer : null, time, dt, this.still);
     }
-    if (heroMode === "card") hero.drawToTexture(time, pixelRatio);
+    if (heroMode === "card") {
+      hero.drawToTexture(time, pixelRatio, this.heroSmall);
+    }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
@@ -305,6 +313,7 @@ export class StageEngine {
     for (const layer of this.layers) {
       if (layer.draw(this, dt)) moving = true;
     }
+    this.glass.draw(this);
     this.layersMoving = moving;
   };
 
@@ -500,6 +509,7 @@ export class StageEngine {
     document.removeEventListener("visibilitychange", this.onVisibility);
     for (const layer of this.layers.splice(0)) layer.dispose();
     this.cards.dispose();
+    this.glass.dispose();
     this.hero.dispose();
     this.backdrop.dispose();
     this.gl.getExtension("WEBGL_lose_context")?.loseContext();

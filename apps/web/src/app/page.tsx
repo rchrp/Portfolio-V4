@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { Contact } from "@/components/contact";
-import { GlassFilter } from "@/components/glass-filter";
 import { Hero } from "@/components/hero";
 import { HomeDirector } from "@/components/home-director";
 import { KeyboardNavigation } from "@/components/keyboard-navigation";
@@ -14,7 +13,6 @@ export default function Home() {
   return (
     <>
       <Stage />
-      <GlassFilter />
       <SiteHeader />
       <main className="site">
         {/* One story, held on screen while the page scrolls: the hero, which

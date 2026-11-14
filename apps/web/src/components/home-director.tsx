@@ -88,6 +88,8 @@ export function HomeDirector() {
               ? "card"
               : "hidden";
 
+      engine.heroSmall = position > 0.3;
+
       // Contact: night falls as the section rises into view.
       const contactTop = contact
         ? contact.getBoundingClientRect().top

@@ -62,17 +62,17 @@ html[data-leaving] :is(.site, .site-header, .stage) {
 
 /* -- Glass ----------------------------------------------------------------- */
 
-/* What floats over the matrix is a pane of glass: it blurs what passes behind
-   and, in Chromium, bends it (see GlassFilter). One solid button per screen
-   keeps the call to action apart. */
+/* What floats over the matrix is a pane of glass. The stage draws what the
+   glass does to the picture behind it (see glass-layer.ts): here are only
+   its tint, its rim and its shadow. Where the stage cannot run, the browser
+   frosts the backdrop instead. One solid button per screen keeps the call to
+   action apart. */
 .glass {
   --glass-tint: rgb(255 255 255 / 0.3);
   --glass-rim: rgb(255 255 255 / 0.8);
   --glass-line: rgb(43 27 17 / 0.1);
   border: 1px solid var(--glass-line);
   background: var(--glass-tint);
-  -webkit-backdrop-filter: blur(9px) saturate(170%);
-  backdrop-filter: blur(9px) saturate(170%);
   box-shadow:
     inset 0 1px 0 var(--glass-rim),
     inset 0 -1px 0 rgb(43 27 17 / 0.06),
@@ -83,9 +83,9 @@ html[data-leaving] :is(.site, .site-header, .stage) {
     color 260ms ease;
 }
 
-html.liquid .glass {
-  -webkit-backdrop-filter: url(#liquid-glass) blur(5px) saturate(170%);
-  backdrop-filter: url(#liquid-glass) blur(5px) saturate(170%);
+html:not([data-stage="on"]) .glass {
+  -webkit-backdrop-filter: blur(9px) saturate(170%);
+  backdrop-filter: blur(9px) saturate(170%);
 }
 
 :is(a, button).glass:is(:hover, :focus-visible) {

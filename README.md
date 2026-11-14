@@ -57,6 +57,7 @@ Behind everything, one canvas stays fixed to the screen: **the stage** (`apps/we
 - **What lives in it** — figures are not sprites laid over the grid. `world.ts` runs small simulations (fixed 60 Hz steps) whose shapes are *sampled by the cells*: a hummingbird is an implicit shape tested at each cell's centre plus four taps, so a cell half covered grows half way. Layers live in `stage/layers/`: `grass.ts` (a meadow, wind, the pointer brushing through), `hummingbirds.ts`, `koi.ts` (a chain of joints, rasterised from distances to its spine), `birds.ts` (a murmuration), `fireflies.ts`, and `name-relief.ts` (a word standing in relief, its sides thrown away from the pointer's light). Cells grow fast and fade slowly, which leaves a pale wake behind anything that passes.
 - **The portrait** — `portrait-layer.ts`. At rest it is the photograph itself. The photograph is also sampled once per cell, and each sample is a square that can take over from the patch of picture it stands for: under the pointer the picture gives way to its squares, which are swept along the pointer's path, glide, and are brought home by a spring. The same squares tell how the portrait arrives: they condense out of the resting dots, then sharpen into the photograph.
 - **Pictures** — `cards-layer.ts` draws project covers, screenshots and the hero's own card as planes placed on a roller or bent around an axis. A picture resolves out of matrix-sized cells while it loads in.
+- **Glass** — `glass-layer.ts`, last: see below.
 
 There are two matrices (`matrix-scene.ts`): the **hero's** (`hero-scene.ts`: meadow, hummingbirds, the first name in relief, the portrait) and the **backdrop** behind the rest of the page. The hero is drawn straight to the screen while it fills it, and into a picture of its own once it starts leaving, so that it can become a card.
 
@@ -72,7 +73,7 @@ The page tells the stage what to show through **directors**: callbacks run at th
 6. **Contact** — the sky turns to sunset, then to night: the hero's meadow again, lit by fireflies. The invitation arrives once it is dark, one way to answer after another.
 7. **Elsewhere** — leaving for `/parcours`, the page sinks into the dark that page opens on.
 
-Text always wins over the matrix: blocks marked `data-calm` are passed to the grid shader, which fades figures and the pointer's light behind them. Controls that float over the matrix are panes of glass (`.glass`, refracting in Chromium through `GlassFilter`); each screen keeps one solid button.
+Text always wins over the matrix: blocks marked `data-calm` are passed to the grid shader, which fades figures and the pointer's light behind them. Controls that float over the matrix are panes of liquid glass (`.glass`); each screen keeps one solid button. The stage draws the glass itself (`stage/glass-layer.ts`): under each pane, the picture just drawn is copied and drawn back bent along the rim, softened, its colours slightly parted. `backdrop-filter` would do part of this, but over a canvas that changes every frame it cost one frame in six here; in the stage it is one small copy and one quad per pane, in every browser.
 
 ### Without WebGL, or with reduced motion
 

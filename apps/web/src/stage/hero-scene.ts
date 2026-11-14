@@ -222,8 +222,12 @@ export class HeroScene {
     this.portrait.draw(this.width, this.height, this.mood, lamp, pixelRatio);
   }
 
-  /** Draws the hero into its own picture, for the card it becomes. */
-  drawToTexture(time: number, pixelRatio: number) {
+  /**
+   * Draws the hero into its own picture, for the card it becomes. `small`
+   * says the card is well under the picture's size: it then needs smaller
+   * copies of itself, or the fine grid would shimmer.
+   */
+  drawToTexture(time: number, pixelRatio: number, small: boolean) {
     const { gl } = this;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
     gl.viewport(0, 0, this.textureWidth, this.textureHeight);
@@ -231,7 +235,12 @@ export class HeroScene {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
-    gl.generateMipmap(gl.TEXTURE_2D);
+    if (small) gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_MIN_FILTER,
+      small ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR,
+    );
     gl.activeTexture(gl.TEXTURE0);
   }
 

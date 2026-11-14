@@ -112,7 +112,7 @@ Day-to-day edits go through the [admin panel](#admin-panel). `pnpm db:studio` st
 
 | Field                                     | Content                                                                                   |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `slug`, `title`, `summary`, `description` | Required. `summary` is one sentence; `description` is plain text, revealed word by word.  |
+| `slug`, `title`, `summary`, `description` | Required. `summary` is one sentence; `description` is plain text.                         |
 | `kind`                                    | `PRODUCT`, `FREELANCE`, `PERSONAL` or `SCHOOL`; shown as the project's kicker.            |
 | `category`, `role`                        | Required, short: what the project is, and what I did.                                     |
 | `client`                                  | Optional, for client work.                                                                |
@@ -120,8 +120,8 @@ Day-to-day edits go through the [admin panel](#admin-panel). `pnpm db:studio` st
 | `highlights`                              | Key points, one short sentence each.                                                      |
 | `technologies`                            | Shown as compact tags.                                                                    |
 | `imageUrl`, `imageAlt`                    | Cover, shown in the carousel and at the top of the project's page. Landscape, 16:9.       |
-| `logoUrl`                                 | Optional logo, drawn by the pixel matrix instead of the cover. Best on transparency.      |
-| `accentColor`                             | Six-digit hex color.                                                                      |
+| `logoUrl`                                 | Optional logo. Kept with the project; the home page does not display it at the moment.    |
+| `accentColor`                             | Six-digit hex color: tints the matrix and its figures on the project's page.              |
 | `notice`                                  | Optional caveat shown above the links, e.g. a platform taken offline.                     |
 | `featured`                                | Marks the project to highlight first.                                                     |
 | `links`                                   | `WEBSITE`, `SOURCE`, `DOWNLOAD`, `VIDEO` or `COMMUNITY`, with a label and an HTTP(S) URL. |

@@ -45,42 +45,39 @@ pnpm db:studio      # browse and edit records locally
 pnpm admin:invite   # one-time link to enroll an admin passkey
 ```
 
-## Story and animation
+## Home page
 
-The page reads as one scroll-driven story; its copy lives in `apps/web/src/lib/site-content.ts`. A vintage monitor follows it from start to finish: one three.js scene (`apps/web/src/components/monitor-stage.tsx`, loaded on demand) on a canvas fixed over the page, which lets clicks through. The camera stays put and the monitor moves from pose to pose (`terminal/monitor-path.ts`): each pose places the centre of its glass in screen space (position, height, largest width, turn, tilt, float), so it suits any viewport, and the scroll of each chapter blends one pose into the next. The page's film grain covers it too.
+The home page is one scroll: who I am, a statement, the projects, and how to reach me. Its copy lives in `apps/web/src/lib/site-content.ts`.
 
-Its glass carries the chapters' main content: cards drawn in its 2D canvas (`terminal/screen-cards.ts`, filled from the site's copy by `terminal/monitor-screens.ts`) that declare the regions a visitor can click. `ScreenControls` lays real, transparent links and buttons over those regions as the monitor moves, so they take the clicks, the keyboard focus (the glass lights the focused one up) and assistive technologies. The chapters' HTML (name, statement, invitation) stays in the page for assistive technologies, invisible; it shows if WebGL fails, or while the monitor takes more than 6 s to load.
+Behind everything, one canvas stays fixed to the screen: **the stage** (`apps/web/src/stage/`, mounted by `src/components/stage/stage.tsx`). It owns a single WebGL2 context and a single animation loop, and draws three things into the same picture:
 
-1. **Hero** — interactive pixel matrix and portrait (light, editorial). On load, a short WebGL intro draws the portrait from its edge map on the matrix grid, fills the silhouette, doubles its resolution step by step while shifting from orange to the photo's colors, then hands over to the real image and releases its WebGL context. The cut-out portrait casts a soft shadow on the wall behind it, over a faint pool of warm light. In the bottom left corner, the monitor powers on with the name and the contact actions (`HeroScreen`); "Me contacter" brings it to the front, large and facing, with the contact details only (e-mail and phone to open or copy, profiles) while the portrait fades away, until Escape, the close button, a click elsewhere or a scroll. Contact details and profile links live in `contact` (`apps/web/src/lib/site-content.ts`) and appear once set.
-2. **Manifesto** — after a light-to-night gradient, the monitor comes closer, centre stage, and holds the statement up: it lights up word by word as you scroll, then the three disciplines appear.
-3. **Projects** — the monitor comes closer than for the manifesto, its glass types "Mes projets", which holds for a screen of scroll, then tunes in to one project after another. Each project has a card (`terminal/project-deck.tsx`: a pane of frosted glass, `backdrop-filter`, no border, its picture seen through it, its number and name) in a row that slides from right to left behind the monitor as the page scrolls (`terminal/card-track.ts`): the next project waits on the right, the last one leaves on the left, each card growing as it nears the monitor and shrinking as it moves away. Behind the monitor, the glass shows the cards in x-ray where they are (`terminal/xray-panels.ts`, composited by the CRT pass in the site's warm phosphor over the night of the tube); the card coming to rest fills the glass while a scan sweeps across it, leaving the project laid out like the hero of its showcase (picture, blur deepening towards the bottom, kicker, title, summary, role and client), drawn into a 2D canvas, then through a CRT pass (slight barrel distortion, radial chromatic aberration, scanlines, glitch when the projects come on, line-then-open power cycle) into the texture the glass emits. Left between the title and a project, or between two projects, the wheel settles on the nearest one (`lenis/snap`, see `magnetizeScroll` in `apps/web/src/lib/smooth-scroll.ts`). The glass is a physical material that keeps the model's base color and the smudges of its roughness map, and reflects a prefiltered environment: a dim room with a window and a setting sun behind the viewer, whose reflection slides across the glass as the monitor turns, sways and follows the pointer. Clicking the glass (a transparent button kept over it, also reachable by keyboard) dives into it and opens the project's accessible native dialog. In the top left corner, like a channel's logo, clear of the monitor and of the cards, the pixel matrix redraws the active project's mark from its edge map (below the monitor on narrow screens); the channel list sits under the monitor (at the top on narrow screens). Arrow keys, the channel list and previous/next buttons scroll to the title or to a given project.
-4. **Contact** — after the last project the tube goes dark while the monitor steps back and settles low in the middle; well into the chapter, it lights up again with the invitation and its links, while the matrix redraws the portrait from its edge map.
+- **The pixel matrix** — a grid of square cells covering the viewport (5 to 7 px apart, denser than the eye can count). `cells.ts` holds one record per cell (a level from resting dot to full square, and a colour) and packs it into a texture: one texel per cell. `matrix-layer.ts` draws the whole grid with one fragment shader, which also computes the resting dots, their slow breathing and the pointer's light. An idle matrix costs one texture read per pixel and nothing on the CPU.
+- **What lives in it** — figures are not sprites laid over the grid. `world.ts` runs small simulations (fixed 60 Hz steps) whose shapes are *sampled by the cells*: a butterfly is an implicit shape tested at each cell's centre plus four taps, so a cell half covered grows half way. The grid itself is what moves. Layers live in `stage/layers/`: `grass.ts` (a meadow, wind, the pointer brushing through), `butterflies.ts`, `koi.ts` (a chain of joints, rasterised from distances to its spine), `birds.ts` (a murmuration), `fireflies.ts`. Cells grow fast and fade slowly, which leaves a pale wake behind anything that passes.
+- **The portrait** — `portrait-layer.ts` samples the photograph once per cell and turns each sample into a square sitting exactly on its cell, sized by how dark the picture is there (a halftone) and coloured like it. Unlike grid cells, these squares can leave their place: the pointer sweeps them along its path, they glide, and a spring brings each one home. They condense out of the resting dots when the page opens and melt back into them as the hero scrolls away.
+- **Pictures** — `cards-layer.ts` draws project covers and screenshots as planes that can bend around an axis and dissolve into matrix-sized cells: out of focus, a picture is a mosaic that sharpens as it comes to the middle.
 
-Reduced-motion preferences make power changes and project switches instant and remove glitches, floating, the monitor's entrance and blur. Without WebGL, the project image, title and summary are shown in a CSS monitor frame.
+The page tells the stage what to show through **directors**: callbacks run at the start of each frame that read where the page is scrolled (`src/components/home-director.tsx`). A **mood** (`stage/moods.ts`: paper, resting dots, light, figure colours) and a **scene** (`stage/scenes.ts`: which layers are alive) are eased from one section to the next, so nothing cuts:
+
+1. **Hero** — warm paper, a meadow at golden hour, a few butterflies, and the portrait in the matrix. The name, one sentence and two actions are plain HTML over it.
+2. **About** — the statement is inked in word by word as it is read; the matrix steps back to quiet dots.
+3. **Projects** — a carousel (`stage/carousel.ts`, `src/components/projects/`): covers wrapped over a wide drum, slightly askew, turned by the scroll, which settles on one project at a time (`lenis/snap`). Only the project in focus shows its name, category and summary. On narrow screens the covers travel sideways instead, clear of the text. Opening a project (`?projet=<slug>`, so links and the back button work) flattens its cover into the project's page: facts, story, figures, and screenshots on a strip wrapped around a cylinder. The matrix takes the project's colour and a world of its own (`src/lib/project-worlds.ts`).
+4. **Contact** — the sky turns to sunset, then to night: the same meadow, lit by fireflies.
+
+Text always wins over the matrix: blocks marked `data-calm` are passed to the grid shader, which fades figures and the pointer's light behind them.
+
+### Without WebGL, or with reduced motion
+
+- `data-stage` on the root element says whether the stage runs. When it cannot (`off`), sections bring back plain backgrounds, the portrait is the photograph, the carousel shows the cover in focus as an image and screenshots scroll sideways.
+- With `prefers-reduced-motion`, the stage draws stills: scenes are simulated ahead for a few seconds, then a frame is drawn only when something changes (scroll, resize, a project opening). Smooth scrolling and CSS animations are off.
+- The loop pauses with the tab, drops to every other frame when only the resting dots breathe, and lowers its resolution if frames keep coming in late.
 
 ### Pixel-matrix edge maps
 
-The matrix draws images from precomputed edge maps: gradient magnitude of a derivative-of-Gaussian filter (separable kernels, percentile normalization), stored as small grayscale PNGs in `apps/web/public/matrix/` and indexed in `apps/web/src/lib/edge-maps.json` by image URL. Generate them once, after adding or changing an image:
-
-```bash
-pnpm --filter web edges                         # public/projects/* and the portrait
-pnpm --filter web edges public/projects/new.png # specific files under public/
-pnpm --filter web edges https://example.com/cover.jpg
-```
-
-In the projects chapter, the matrix draws the project's **logo** when it has one (always fitted whole, never cropped), and its cover otherwise. Logos and covers uploaded from the [admin panel](#images) get their edge map at upload time, stored next to the image (`<name>.edges.png`) and found by that naming convention, so they need no script run. Projects whose image has no edge map fall back to computing it in the browser (remote images need CORS headers). The portrait also gets a light color texture (`*-color.webp`, 960 px) used by the hero intro.
-
-### 3D model
-
-The monitor ("Monitor IV" by re1monsen, CC BY 4.0) is a third-party model, adapted for the site by `apps/web/scripts/build-model.mjs`: it removes Sketchfab's ground plane, bakes the transforms (1.7 units wide, base on y = 0), gives the curved glass its own `Screen` material (it keeps the atlas UVs of its smudges and gains a second UV set spanning 0–1 for the screen), keeps every face since the monitor turns around as it moves, simplifies the meshes with meshoptimizer, quantizes them and re-encodes textures as WebP, near-lossless for the normal, roughness and occlusion maps which hold the bezel's knurling (8.2 MB and 10,200 triangles → 1.4 MB and 7,000 triangles; lossy maps blur the knurling). The source stays in `apps/web/assets/models/` (not served); rebuild after changing it:
-
-```bash
-pnpm --filter web model
-```
+The admin panel still computes an edge map for each uploaded logo or cover (`<name>.edges.png`), and `pnpm --filter web edges` does the same for local images. The home page no longer draws them: the matrix now shows pictures in full colour rather than their outlines.
 
 ## Journey page
 
-`/parcours` tells the journey (studies, jobs, freelance work, projects) as a corridor in the dark, walked as the page scrolls. Its steps live in the `JourneyEntry` table, are edited from the admin panel (**Parcours**) and are ordered by start date; its copy lives in `apps/web/src/lib/journey-content.ts`. A step can link the published projects made during it, which open in the homepage's showcase (`/?projet=<slug>`), and each one has an anchor (`/parcours#<slug>`).
+`/parcours` tells the journey (studies, jobs, freelance work, projects) as a corridor in the dark, walked as the page scrolls. Its steps live in the `JourneyEntry` table, are edited from the admin panel (**Parcours**) and are ordered by start date; its copy lives in `apps/web/src/lib/journey-content.ts`. A step can link the published projects made during it, which open in their page on the home page (`/?projet=<slug>`), and each one has an anchor (`/parcours#<slug>`).
 
 - **three.js** (`src/components/journey/journey-scene.ts`, loaded on demand) draws the world: a floor of square pixels fading into fog, the path (orange where it has been walked), a marker and a connector per step, floating dust, and a desk lamp that flickers on and lights the start of the path.
 - **The steps stay HTML**, so they remain crisp, selectable and accessible: the scene places them in the same 3D space with CSS transforms computed from its camera (the CSS3DRenderer technique). Depth of field is a CSS blur growing with the distance to the step being read; steps ahead wait in the haze, steps already read fly past, blurred.
@@ -94,7 +91,7 @@ pnpm --filter web model:lamp
 
 ## Project catalog
 
-The terminal chapter reads published projects, with their links, gallery and figures, from PostgreSQL on the server. `GET /api/projects` exposes the same public catalog with a `source` field (`database` or `demo`), without caching database failures. Projects are edited in the [admin panel](#admin-panel); there are no public write endpoints.
+The projects section reads published projects, with their links, gallery and figures, from PostgreSQL on the server. `GET /api/projects` exposes the same public catalog with a `source` field (`database` or `demo`), without caching database failures. Projects are edited in the [admin panel](#admin-panel); there are no public write endpoints.
 
 - Missing or unreachable database: four **clearly labeled fictional examples**, using locally stored SVG artwork, are displayed. They are never inserted into PostgreSQL. A failed database read is reported server-side without logging credentials.
 - Connected but empty database (or only drafts): an intentional empty state is shown, **not** fabricated projects.
@@ -122,7 +119,7 @@ Day-to-day edits go through the [admin panel](#admin-panel). `pnpm db:studio` st
 | `startedOn`, `endedOn`                    | Dates; displayed as years. No `endedOn` means the project is ongoing ("Depuis 2026").     |
 | `highlights`                              | Key points, one short sentence each.                                                      |
 | `technologies`                            | Shown as compact tags.                                                                    |
-| `imageUrl`, `imageAlt`                    | Cover, shown on the monitor and in the showcase hero. Landscape, about 16:9.              |
+| `imageUrl`, `imageAlt`                    | Cover, shown in the carousel and at the top of the project's page. Landscape, 16:9.       |
 | `logoUrl`                                 | Optional logo, drawn by the pixel matrix instead of the cover. Best on transparency.      |
 | `accentColor`                             | Six-digit hex color.                                                                      |
 | `notice`                                  | Optional caveat shown above the links, e.g. a platform taken offline.                     |
@@ -195,10 +192,6 @@ Objects are written with a one-year immutable `Cache-Control` and saved in the p
 
 The source code of this repository is licensed under the [MIT License](LICENSE). The following assets are **not** covered by the MIT License and keep their own licenses:
 
-- **3D model** — ["Monitor III"](https://sketchfab.com/3d-models/monitor-iii-fb119750ac4f4b1e89b4be7c870b4eb2) by [re1monsen](https://sketchfab.com/re1monsen), licensed under [Creative Commons Attribution 4.0](http://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).
-  - Files: `apps/web/assets/models/monitor_iii.glb` (original) and `apps/web/public/models/monitor.glb` (adapted).
-  - Changes: ground plane and floor cable removed, transforms baked and rescaled, screen glass split into a separate primitive with a second UV set, meshes simplified and quantized, textures resized and converted to WebP.
-  - The site credits the author in its footer.
 - **3D model** — ["Desk lamp"](https://sketchfab.com/3d-models/desk-lamp-b9458e04d30e4b6284d46d35880a9b95) by [HASSAN](https://sketchfab.com/7ASSAN), licensed under [Creative Commons Attribution 4.0](http://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).
   - Files: `apps/web/assets/models/desk_lamp.glb` (original) and `apps/web/public/models/desk-lamp.glb` (adapted).
   - Changes: transforms baked, rescaled, attributes quantized, textures resized and converted to WebP.

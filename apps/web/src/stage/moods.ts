@@ -71,6 +71,24 @@ export const quietMood: Mood = {
   haloAmount: 0,
 };
 
+/** Between the page and its last section: the sky, for a moment, at sunset. */
+export const sunsetMood: Mood = {
+  bg: [232, 150, 96],
+  ink: [84, 40, 22],
+  accent: [255, 214, 160],
+  accent2: [150, 70, 36],
+  pale: [255, 232, 196],
+  rest: [124, 56, 28],
+  restAlpha: 0.2,
+  restSize: 0.19,
+  breath: 0.6,
+  light: [255, 236, 200],
+  bloom: [255, 196, 136],
+  bloomAmount: 0.5,
+  halo: [244, 150, 84],
+  haloAmount: 0,
+};
+
 /** Contact: the same meadow, after dark. */
 export const nightMood: Mood = {
   bg: NIGHT,

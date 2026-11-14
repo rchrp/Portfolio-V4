@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useStage } from "@/components/stage/stage";
 import { direction } from "@/stage/direction";
 import { clamp01, smoothstep } from "@/stage/math";
-import { goldenMood, nightMood, quietMood } from "@/stage/moods";
+import { goldenMood, nightMood, quietMood, sunsetMood } from "@/stage/moods";
 import { driftScene, duskScene, meadowScene } from "@/stage/scenes";
 
 const PORTRAIT = "/matrix/portrait-color.webp";
@@ -71,15 +71,19 @@ export function HomeDirector() {
       const contactTop = contact
         ? contact.getBoundingClientRect().top
         : Infinity;
-      const night =
-        1 - smoothstep(viewport * 0.18, viewport * 0.92, contactTop);
+      const night = 1 - smoothstep(viewport * 0.1, viewport * 0.6, contactTop);
 
       if (project) {
         engine.setMood(project.mood);
         engine.setScene(project.scene);
       } else if (night > 0) {
-        engine.setMoodMix(quietMood, nightMood, night);
-        engine.setScene(night > 0.25 ? duskScene : null);
+        // The page does not simply darken: the sky turns to sunset first.
+        if (night < 0.45) {
+          engine.setMoodMix(quietMood, sunsetMood, night / 0.45);
+        } else {
+          engine.setMoodMix(sunsetMood, nightMood, (night - 0.45) / 0.55);
+        }
+        engine.setScene(night > 0.3 ? duskScene : null);
       } else {
         const golden = 1 - smoothstep(0.2, 0.75, away);
         engine.setMoodMix(quietMood, goldenMood, golden);

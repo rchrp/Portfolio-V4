@@ -773,7 +773,7 @@
 }
 
 /* The corridor is already in the dark: the contact section needs no dusk. */
-.journey-page .contact {
+html:root .journey-page .contact {
   min-height: 100svh;
   padding-top: clamp(5rem, 14svh, 9rem);
   background: var(--night);

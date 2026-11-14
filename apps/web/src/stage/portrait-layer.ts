@@ -398,7 +398,7 @@ export class PortraitLayer {
     }
 
     const spacing = grid.spacing;
-    const reach = clamp(spacing * 15, 72, 124);
+    const reach = clamp(spacing * 17, 80, 136);
     const pointerSpeed = Math.hypot(pointer.vx, pointer.vy);
     const near =
       !still &&
@@ -488,13 +488,13 @@ export class PortraitLayer {
           const force = falloff * falloff * strength;
           // Swept along the pointer's path, pushed aside, and jostled.
           vx +=
-            (sweepX * 13 +
+            (sweepX * 16 +
               (dx / distance) * press +
               (Math.random() - 0.5) * scatter * 9) *
             force *
             dt;
           vy +=
-            (sweepY * 13 +
+            (sweepY * 16 +
               (dy / distance) * press +
               (Math.random() - 0.5) * scatter * 9) *
             force *

@@ -129,6 +129,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     const carousel = new Carousel(sources);
     carouselRef.current = carousel;
     let laidOutFor = "";
+    let faded = 1;
 
     const release = stage.direct((engine, dt) => {
       const height = window.innerHeight;
@@ -142,6 +143,13 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
         bounds.bottom > -height * 0.2 && bounds.top < height * 1.2;
       const shift = sticky.getBoundingClientRect().top;
       const cover = coverRef.current?.getBoundingClientRect() ?? null;
+      // Past its last project, the section fades before night falls on
+      // the contact section: no dark words on a darkening page.
+      const fade = 1 - clamp((-shift / height - 0.04) / 0.36, 0, 1);
+      if (fade !== faded) {
+        faded = fade;
+        sticky.style.opacity = fade.toFixed(3);
+      }
       const moving = carousel.update(
         engine,
         dt,
@@ -150,6 +158,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
         visible,
         cover,
         height,
+        fade,
       );
       if (moving) engine.wake();
 
@@ -180,6 +189,7 @@ export function Projects({ catalog }: { catalog: ProjectCatalog }) {
     return () => {
       window.clearTimeout(preload);
       release();
+      sticky.style.opacity = "";
       carouselRef.current = null;
     };
   }, [stage, sources]);

@@ -93,7 +93,8 @@ export class Carousel {
    * Advances towards `target` (the position the scroll asks for) and pushes
    * this frame's covers. `shift` moves the whole column vertically, while
    * the section slides in or out of the screen. `cover` is where the open
-   * project wants its cover. Returns whether anything is still moving.
+   * project wants its cover, and `fade` dims the whole carousel as its section
+   * leaves the screen. Returns whether anything is still moving.
    */
   update(
     stage: StageEngine,
@@ -103,6 +104,7 @@ export class Carousel {
     visible: boolean,
     cover: Rect | null,
     viewHeight: number,
+    fade = 1,
   ) {
     const { width, still } = stage;
     // The visible height: on phones the canvas runs under the toolbars.
@@ -162,8 +164,10 @@ export class Carousel {
         curveX: sideways ? curve : 0,
         pivotX: layout.x,
         roll: sideways ? ROLL * 0.5 : ROLL,
-        alpha: 1 - smoothstep(1.45, 2.3, distance),
-        pixel: clamp01(smoothstep(0.1, 0.95, distance) + rush * 0.5),
+        alpha: fade * (1 - smoothstep(1.45, 2.3, distance)),
+        pixel: clamp01(
+          smoothstep(0.1, 0.95, distance) + rush * 0.5 + (1 - fade) * 0.8,
+        ),
         dim: 0.36 * smoothstep(0.15, 1.3, distance),
         shadow: 1 - smoothstep(0, 0.7, distance),
         radius: 12,

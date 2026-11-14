@@ -118,6 +118,9 @@ export function scrollPageTo(top: number, instant = false) {
     return;
   }
   const lenis = page;
+  // Lenis measures the page a moment after it changes: a jump made as a
+  // section arrives would stop at the old end of the page.
+  lenis.resize();
   destination = instant ? null : Math.min(lenis.limit, Math.max(0, top));
   lenis.scrollTo(top, {
     immediate: instant,
